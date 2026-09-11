@@ -1,0 +1,10 @@
+@startuml
+!include <C4/C4_Context>
+Person(user, "Usuário financeiro")
+System(vertx, "Fluxo de Caixa Vertx", "Lançamentos, consolidação, extratos e gestão de acessos")
+System_Ext(keycloak, "Keycloak", "Identidade OIDC/MFA")
+System_Ext(google, "Google Fraud Defense/reCAPTCHA", "Avaliação antirrobô indisponível até liberação")
+Rel(user, vertx, "Usa via navegador")
+Rel(vertx, keycloak, "Autentica por OIDC")
+Rel(vertx, google, "Cria assessment quando configurado")
+@enduml

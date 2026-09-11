@@ -1,0 +1,20 @@
+{
+  "vhosts": [
+    { "name": "vertx-uat" },
+    { "name": "vertx-production" }
+  ],
+  "exchanges": [
+    { "name": "cashflow.events", "vhost": "vertx-uat", "type": "topic", "durable": true, "auto_delete": false, "internal": false, "arguments": {} },
+    { "name": "cashflow.events", "vhost": "vertx-production", "type": "topic", "durable": true, "auto_delete": false, "internal": false, "arguments": {} }
+  ],
+  "queues": [
+    { "name": "consolidation.entries", "vhost": "vertx-uat", "durable": true, "auto_delete": false, "arguments": {} },
+    { "name": "consolidation.entries.dlq", "vhost": "vertx-uat", "durable": true, "auto_delete": false, "arguments": {} },
+    { "name": "consolidation.entries", "vhost": "vertx-production", "durable": true, "auto_delete": false, "arguments": {} },
+    { "name": "consolidation.entries.dlq", "vhost": "vertx-production", "durable": true, "auto_delete": false, "arguments": {} }
+  ],
+  "bindings": [
+    { "source": "cashflow.events", "vhost": "vertx-uat", "destination": "consolidation.entries", "destination_type": "queue", "routing_key": "cashflow.entry.*", "arguments": {} },
+    { "source": "cashflow.events", "vhost": "vertx-production", "destination": "consolidation.entries", "destination_type": "queue", "routing_key": "cashflow.entry.*", "arguments": {} }
+  ]
+}

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Definição Arquitetura Software Fluxo de Caixa</title>
+  <style>
+    body { color: #111827; font-family: Arial, sans-serif; line-height: 1.45; margin: 40px; }
+    h1 { color: #0f766e; font-size: 28px; }
+    h2 { border-bottom: 1px solid #d1d5db; color: #0f172a; margin-top: 28px; padding-bottom: 6px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #d1d5db; padding: 8px; text-align: left; }
+    th { background: #f3f4f6; }
+    code { background: #f3f4f6; padding: 1px 4px; }
+  </style>
+</head>
+<body>
+  <h1>Definição Arquitetura Software Fluxo de Caixa</h1>
+  <p><strong>Projeto:</strong> Vertx.CashFlow. <strong>Data:</strong> 2026-09-11.</p>
+  <h2>Objetivo</h2>
+  <p>Sistema B2B para registrar lançamentos financeiros, preservar ledger imutável,
+  projetar consolidado diário, gerar extratos e administrar tenants, usuários,
+  roles e permissões.</p>
+  <h2>Fatia executável atual</h2>
+  <table>
+    <tr><th>Componente</th><th>Estado</th></tr>
+    <tr><td>BFF</td><td>Implementado com proxy fixo e challenge first-party parcial.</td></tr>
+    <tr><td>Entries API</td><td>Implementada com cadastros, lançamentos, estorno, idempotência e outbox local.</td></tr>
+    <tr><td>Workers</td><td>Relay, consolidação e relatórios implementados como processos separados.</td></tr>
+    <tr><td>SPA</td><td>Implementada em React/Vite, pt-BR, consumindo BFF.</td></tr>
+    <tr><td>Observabilidade</td><td>API sintética rotulada; OTel/Prometheus/Grafana/Loki preparados e desabilitados.</td></tr>
+  </table>
+  <h2>Separação de fontes</h2>
+  <p>Dados financeiros, autenticação, permissões, CRUD, broker, cache e Vault não são
+  simulados como concluídos. Onde a fatia usa storage file-backed, isso é limitação
+  explícita e não substitui PostgreSQL/RLS/TLS da arquitetura alvo.</p>
+  <h2>Evidências reais</h2>
+  <ul>
+    <li><code>scripts/build.sh --env uat</code>: build/publish backend e build SPA executados.</li>
+    <li><code>scripts/test.sh --env uat</code>: 8 testes passaram e typecheck frontend passou.</li>
+    <li><code>scripts/smoke.sh --env uat</code>: validação prática após subir containers.</li>
+  </ul>
+  <h2>Riscos residuais</h2>
+  <p>OIDC/Keycloak, Vault real, PostgreSQL/RabbitMQ/Redis reais, DNS/TLS público,
+  benchmark k6 de 50 RPS, E2E e scans permanecem pendentes antes de produção real.</p>
+</body>
+</html>

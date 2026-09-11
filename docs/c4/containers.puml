@@ -1,0 +1,28 @@
+@startuml
+!include <C4/C4_Container>
+System_Boundary(vertx, "Fluxo de Caixa Vertx") {
+  Container(spa, "React SPA", "React 19/Vite", "Interface")
+  Container(bff, "BFF", ".NET 10", "Sessão, edge e proxy fixo")
+  Container(entries, "Entries API", ".NET 10", "Cadastros, lançamentos, outbox e extratos")
+  Container(relay, "Outbox Relay", ".NET Worker", "Publica eventos")
+  Container(worker, "Consolidation Worker", ".NET Worker", "Consome eventos e projeta")
+  Container(consolidation, "Consolidation API", ".NET 10", "Consulta read model")
+  Container(management, "Management API", ".NET 10", "Usuários, roles e permissões")
+  Container(reports, "Reports Worker", ".NET Worker", "Gera PDF/XLSX/CSV")
+  Container(sim, "Observability Simulation", ".NET 10", "Telemetria sintética")
+}
+ContainerDb(writeDb, "PostgreSQL Write", "PostgreSQL 18")
+ContainerDb(readDb, "PostgreSQL Read", "PostgreSQL 18")
+ContainerQueue(rabbit, "RabbitMQ", "4.2")
+Rel(spa, bff, "Chama mesma origem")
+Rel(bff, entries, "Encaminha API")
+Rel(bff, management, "Encaminha API")
+Rel(entries, writeDb, "Commit local")
+Rel(relay, writeDb, "Lê outbox")
+Rel(relay, rabbit, "Publica evento")
+Rel(worker, rabbit, "Consome/ACK")
+Rel(worker, readDb, "Persiste projeção")
+Rel(consolidation, readDb, "Consulta")
+Rel(reports, writeDb, "Lê snapshot autorizado")
+Rel(bff, sim, "Consulta sintética")
+@enduml

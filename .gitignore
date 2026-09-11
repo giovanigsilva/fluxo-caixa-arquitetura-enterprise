@@ -427,3 +427,10 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# Vertx CashFlow local runtime and secrets
+.runtime/
+.secrets/
+artifacts/
+*.tsbuildinfo
+docs/exports/*.tmp

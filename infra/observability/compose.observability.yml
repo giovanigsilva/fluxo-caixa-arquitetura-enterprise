@@ -1,0 +1,40 @@
+name: vertx-observability
+
+services:
+  otel-collector:
+    build:
+      context: ./otel-collector
+    profiles: ["observability"]
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    ports:
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
+    networks: [observability]
+
+  prometheus:
+    build:
+      context: ./prometheus
+    profiles: ["observability"]
+    ports:
+      - "127.0.0.1:9090:9090"
+    networks: [observability]
+
+  grafana:
+    build:
+      context: ./grafana
+    profiles: ["observability"]
+    ports:
+      - "127.0.0.1:3002:3000"
+    networks: [observability]
+
+  loki:
+    build:
+      context: ./loki
+    profiles: ["observability"]
+    ports:
+      - "127.0.0.1:3100:3100"
+    networks: [observability]
+
+networks:
+  observability:
+    name: vertx-observability

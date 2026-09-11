@@ -1,0 +1,230 @@
+name: vertx-production
+
+x-dotnet-service: &dotnet-service
+  image: mcr.microsoft.com/dotnet/aspnet:10.0.12
+  user: "${VERTX_UID:-1000}:${VERTX_GID:-1000}"
+  working_dir: /app
+  restart: unless-stopped
+  read_only: true
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,size=64m
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  networks:
+    - app
+  volumes:
+    - ../../.runtime/production:/runtime
+  environment:
+    ASPNETCORE_ENVIRONMENT: Production
+    ASPNETCORE_URLS: http://+:8080
+    VERTX_STATE_FILE: /runtime/cashflow-state.json
+    VERTX_EXPORT_DIR: /runtime/exports
+
+services:
+  bff:
+    <<: *dotnet-service
+    container_name: vertx-production-bff
+    command: ["dotnet", "Vertx.CashFlow.Bff.dll"]
+    volumes:
+      - ../../.runtime/publish/bff:/app:ro
+      - ../../.runtime/production:/runtime
+    ports:
+      - "127.0.0.1:6310:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      VERTX_STATE_FILE: /runtime/cashflow-state.json
+      ENTRIES_URL: http://entries-api:8080
+      MANAGEMENT_URL: http://management-api:8080
+      CONSOLIDATION_URL: http://consolidation-api:8080
+      OBSERVABILITY_URL: http://observability-api:8080
+    depends_on:
+      entries-api:
+        condition: service_started
+      management-api:
+        condition: service_started
+      consolidation-api:
+        condition: service_started
+      observability-api:
+        condition: service_started
+
+  web:
+    image: python:3.12-alpine
+    container_name: vertx-production-web
+    command: ["python", "-m", "http.server", "8080", "--directory", "/www"]
+    user: "${VERTX_UID:-1000}:${VERTX_GID:-1000}"
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    ports:
+      - "127.0.0.1:6330:8080"
+    networks:
+      - app
+    volumes:
+      - ../../apps/web/dist:/www:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080', timeout=3).read()"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+
+  management-api:
+    <<: *dotnet-service
+    container_name: vertx-production-management-api
+    command: ["dotnet", "Vertx.CashFlow.Management.Api.dll"]
+    volumes:
+      - ../../.runtime/publish/management-api:/app:ro
+      - ../../.runtime/production:/runtime
+
+  entries-api:
+    <<: *dotnet-service
+    container_name: vertx-production-entries-api
+    command: ["dotnet", "Vertx.CashFlow.Entries.Api.dll"]
+    volumes:
+      - ../../.runtime/publish/entries-api:/app:ro
+      - ../../.runtime/production:/runtime
+
+  consolidation-api:
+    <<: *dotnet-service
+    container_name: vertx-production-consolidation-api
+    command: ["dotnet", "Vertx.CashFlow.Consolidation.Api.dll"]
+    volumes:
+      - ../../.runtime/publish/consolidation-api:/app:ro
+      - ../../.runtime/production:/runtime
+
+  observability-api:
+    <<: *dotnet-service
+    container_name: vertx-production-observability-api
+    command: ["dotnet", "Vertx.CashFlow.ObservabilitySimulation.Api.dll"]
+    volumes:
+      - ../../.runtime/publish/observability-api:/app:ro
+      - ../../.runtime/production:/runtime
+
+  outbox-relay:
+    <<: *dotnet-service
+    container_name: vertx-production-outbox-relay
+    command: ["dotnet", "Vertx.CashFlow.OutboxRelay.dll"]
+    volumes:
+      - ../../.runtime/publish/outbox-relay:/app:ro
+      - ../../.runtime/production:/runtime
+
+  consolidation-worker:
+    <<: *dotnet-service
+    container_name: vertx-production-consolidation-worker
+    command: ["dotnet", "Vertx.CashFlow.ConsolidationWorker.dll"]
+    volumes:
+      - ../../.runtime/publish/consolidation-worker:/app:ro
+      - ../../.runtime/production:/runtime
+    depends_on:
+      outbox-relay:
+        condition: service_started
+
+  reports-worker:
+    <<: *dotnet-service
+    container_name: vertx-production-reports-worker
+    command: ["dotnet", "Vertx.CashFlow.ReportsWorker.dll"]
+    volumes:
+      - ../../.runtime/publish/reports-worker:/app:ro
+      - ../../.runtime/production:/runtime
+
+  postgres-write:
+    image: postgres:18.1-bookworm
+    profiles: ["infra"]
+    environment:
+      POSTGRES_DB: vertx_cashflow_write
+      POSTGRES_USER: vertx_write
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_write_password
+    secrets:
+      - postgres_write_password
+    volumes:
+      - ../../.runtime/production/postgres-write:/var/lib/postgresql/data
+    networks:
+      - app
+
+  postgres-read:
+    image: postgres:18.1-bookworm
+    profiles: ["infra"]
+    environment:
+      POSTGRES_DB: vertx_cashflow_read
+      POSTGRES_USER: vertx_read
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_read_password
+    secrets:
+      - postgres_read_password
+    volumes:
+      - ../../.runtime/production/postgres-read:/var/lib/postgresql/data
+    networks:
+      - app
+
+  postgres-platform:
+    image: postgres:18.1-bookworm
+    profiles: ["infra"]
+    environment:
+      POSTGRES_DB: vertx_platform
+      POSTGRES_USER: vertx_platform
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_platform_password
+    secrets:
+      - postgres_platform_password
+    volumes:
+      - ../../.runtime/production/postgres-platform:/var/lib/postgresql/data
+    networks:
+      - app
+
+  redis-cache:
+    image: redis:8.4.0-alpine
+    profiles: ["infra"]
+    command: ["redis-server", "--appendonly", "no", "--save", ""]
+    networks:
+      - app
+
+  redis-quota:
+    image: redis:8.4.0-alpine
+    profiles: ["infra"]
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - ../../.runtime/production/redis-quota:/data
+    networks:
+      - app
+
+  rabbitmq:
+    image: rabbitmq:4.2.1-management-alpine
+    profiles: ["infra"]
+    hostname: vertx-production-rabbitmq
+    volumes:
+      - ../../.runtime/production/rabbitmq:/var/lib/rabbitmq
+    networks:
+      - app
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.4.7
+    profiles: ["infra"]
+    command: ["start", "--http-enabled=true", "--hostname=vertx.dwilon.com", "--hostname-strict=false"]
+    networks:
+      - app
+
+  vault:
+    image: hashicorp/vault:1.21.1
+    profiles: ["infra"]
+    cap_add:
+      - IPC_LOCK
+    volumes:
+      - ../../.runtime/production/vault:/vault/file
+      - ../vault:/vault/config:ro
+    networks:
+      - app
+
+networks:
+  app:
+    name: vertx-production-app
+
+secrets:
+  postgres_write_password:
+    file: ../../.secrets/production/postgres_write_password
+  postgres_read_password:
+    file: ../../.secrets/production/postgres_read_password
+  postgres_platform_password:
+    file: ../../.secrets/production/postgres_platform_password

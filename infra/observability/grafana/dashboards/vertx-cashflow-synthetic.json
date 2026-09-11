@@ -1,0 +1,18 @@
+{
+  "uid": "vertx-cashflow-synthetic",
+  "title": "Vertx CashFlow - Prepared Observability",
+  "schemaVersion": 42,
+  "version": 1,
+  "tags": ["vertx", "synthetic"],
+  "panels": [
+    {
+      "type": "text",
+      "title": "Estado",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 4 },
+      "options": {
+        "mode": "markdown",
+        "content": "Coletor real preparado, mas não iniciado por padrão. O painel operacional da aplicação exibe telemetria sintética rotulada."
+      }
+    }
+  ]
+}

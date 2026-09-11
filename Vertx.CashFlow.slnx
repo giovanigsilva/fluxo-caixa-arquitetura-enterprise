@@ -1,0 +1,40 @@
+<Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/src/Assistant.Contracts/">
+    <Project Path="src/Assistant.Contracts/Vertx.CashFlow.Assistant.Contracts/Vertx.CashFlow.Assistant.Contracts.csproj" />
+  </Folder>
+  <Folder Name="/src/Bff/">
+    <Project Path="src/Bff/Vertx.CashFlow.Bff/Vertx.CashFlow.Bff.csproj" />
+  </Folder>
+  <Folder Name="/src/BuildingBlocks/">
+    <Project Path="src/BuildingBlocks/Vertx.CashFlow.BuildingBlocks/Vertx.CashFlow.BuildingBlocks.csproj" />
+  </Folder>
+  <Folder Name="/src/Consolidation/">
+    <Project Path="src/Consolidation/Vertx.CashFlow.Consolidation.Api/Vertx.CashFlow.Consolidation.Api.csproj" />
+  </Folder>
+  <Folder Name="/src/ConsolidationWorker/">
+    <Project Path="src/ConsolidationWorker/Vertx.CashFlow.ConsolidationWorker/Vertx.CashFlow.ConsolidationWorker.csproj" />
+  </Folder>
+  <Folder Name="/src/Entries/">
+    <Project Path="src/Entries/Vertx.CashFlow.Entries.Api/Vertx.CashFlow.Entries.Api.csproj" />
+  </Folder>
+  <Folder Name="/src/Management/">
+    <Project Path="src/Management/Vertx.CashFlow.Management.Api/Vertx.CashFlow.Management.Api.csproj" />
+  </Folder>
+  <Folder Name="/src/ObservabilitySimulation/">
+    <Project Path="src/ObservabilitySimulation/Vertx.CashFlow.ObservabilitySimulation.Api/Vertx.CashFlow.ObservabilitySimulation.Api.csproj" />
+  </Folder>
+  <Folder Name="/src/OutboxRelay/">
+    <Project Path="src/OutboxRelay/Vertx.CashFlow.OutboxRelay/Vertx.CashFlow.OutboxRelay.csproj" />
+  </Folder>
+  <Folder Name="/src/ReportsWorker/">
+    <Project Path="src/ReportsWorker/Vertx.CashFlow.ReportsWorker/Vertx.CashFlow.ReportsWorker.csproj" />
+  </Folder>
+  <Folder Name="/tests/" />
+  <Folder Name="/tests/Security/">
+    <Project Path="tests/Security/Vertx.CashFlow.SecurityTests/Vertx.CashFlow.SecurityTests.csproj" />
+  </Folder>
+  <Folder Name="/tests/Unit/">
+    <Project Path="tests/Unit/Vertx.CashFlow.UnitTests/Vertx.CashFlow.UnitTests.csproj" />
+  </Folder>
+</Solution>
