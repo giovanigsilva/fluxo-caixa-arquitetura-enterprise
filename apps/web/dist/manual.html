@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Manual de Uso - Fluxo de Caixa Vertx</title>
+    <style>
+      :root {
+        color: #0f172a;
+        background: #f8fafc;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        line-height: 1.55;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-width: 320px; }
+      header { background: #0f172a; color: white; padding: 34px 24px; }
+      header div, main { margin: 0 auto; max-width: 1120px; }
+      header p { color: #cbd5e1; margin: 8px 0 0; max-width: 820px; }
+      main { display: grid; gap: 22px; padding: 24px; }
+      section { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 22px; }
+      h1, h2, h3 { letter-spacing: 0; line-height: 1.15; margin: 0; }
+      h1 { font-size: 34px; }
+      h2 { font-size: 22px; margin-bottom: 12px; }
+      h3 { font-size: 17px; margin: 18px 0 8px; }
+      p { margin: 8px 0; }
+      a { color: #0f766e; font-weight: 800; }
+      ul, ol { margin: 8px 0 0; padding-left: 22px; }
+      li { margin: 5px 0; }
+      code, pre { background: #f1f5f9; border-radius: 6px; color: #0f172a; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      code { padding: 2px 5px; }
+      pre { overflow-x: auto; padding: 14px; }
+      table { border-collapse: collapse; margin-top: 10px; width: 100%; }
+      th, td { border-bottom: 1px solid #e2e8f0; padding: 10px; text-align: left; vertical-align: top; }
+      th { color: #475569; font-size: 12px; text-transform: uppercase; }
+      .grid { display: grid; gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .toc { display: grid; gap: 8px; grid-template-columns: repeat(3, minmax(0, 1fr)); padding-left: 0; }
+      .toc li { list-style: none; }
+      .badge { background: #ccfbf1; border: 1px solid #99f6e4; border-radius: 999px; color: #115e59; display: inline-flex; font-size: 13px; font-weight: 900; padding: 5px 10px; }
+      .warning { background: #fffbeb; border-color: #fde68a; }
+      .danger { background: #fff1f2; border-color: #fecdd3; }
+      @media (max-width: 760px) {
+        header { padding: 28px 18px; }
+        main { padding: 18px; }
+        .grid, .toc { grid-template-columns: 1fr; }
+        section { padding: 18px; }
+        h1 { font-size: 28px; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        <span class="badge">Manual de instrucoes</span>
+        <h1>Fluxo de Caixa Vertx</h1>
+        <p>Guia completo para acessar, usar e entender cada item da fatia executavel publicada em UAT/producao de avaliacao.</p>
+      </div>
+    </header>
+    <main>
+      <section>
+        <h2>Indice</h2>
+        <ul class="toc">
+          <li><a href="#acesso">Acesso</a></li>
+          <li><a href="#menu">Menu</a></li>
+          <li><a href="#dashboard">Dashboard</a></li>
+          <li><a href="#lancamentos">Lancamentos</a></li>
+          <li><a href="#monitoramento">Monitoramento</a></li>
+          <li><a href="#alertas">Alertas</a></li>
+          <li><a href="#carga">Teste de carga</a></li>
+          <li><a href="#swagger">Swagger</a></li>
+          <li><a href="#seguranca">Seguranca</a></li>
+          <li><a href="#operacao">Operacao</a></li>
+          <li><a href="#troubleshooting">Troubleshooting</a></li>
+          <li><a href="#limites">Limites</a></li>
+        </ul>
+      </section>
+
+      <section id="acesso">
+        <h2>Acesso</h2>
+        <div class="grid">
+          <div>
+            <h3>Endereco publico</h3>
+            <p><a href="https://vertx.dwilon.com/">https://vertx.dwilon.com/</a></p>
+            <p>Documentacao API: <a href="https://vertx.dwilon.com/swagger">/swagger</a></p>
+            <p>OpenAPI JSON: <a href="https://vertx.dwilon.com/openapi/v1.json">/openapi/v1.json</a></p>
+          </div>
+          <div>
+            <h3>Credenciais de avaliacao</h3>
+            <pre>Login: admin@admin.com
+Senha: Vtx-1d7d875ea260072afc7fa86d</pre>
+            <p>O login exige senha e Google reCAPTCHA v2 checkbox validado no BFF.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="menu">
+        <h2>Menu principal</h2>
+        <table>
+          <thead><tr><th>Item</th><th>Funcao</th></tr></thead>
+          <tbody>
+            <tr><td>Dashboard</td><td>Visao executiva de fluxo financeiro, banco, latencia e alertas.</td></tr>
+            <tr><td>Monitoramento</td><td>Saude sintetica dos componentes do sistema e metricas operacionais.</td></tr>
+            <tr><td>Alertas</td><td>Regras simuladas que podem ser ativadas ou silenciadas.</td></tr>
+            <tr><td>Teste de carga</td><td>Cenarios sinteticos para demonstrar comportamento sob carga.</td></tr>
+            <tr><td>Lancamentos</td><td>Tabela de creditos e debitos confirmados.</td></tr>
+            <tr><td>Clientes</td><td>Clientes seed disponiveis para demonstracao.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="dashboard">
+        <h2>Dashboard</h2>
+        <p>O dashboard mostra os principais indicadores de operacao financeira e de saude tecnica.</p>
+        <ul>
+          <li><strong>Creditos:</strong> soma das entradas registradas.</li>
+          <li><strong>Debitos:</strong> soma das saidas registradas.</li>
+          <li><strong>Saldo projetado:</strong> creditos menos debitos.</li>
+          <li><strong>Banco total req/s:</strong> leitura + escrita por segundo em simulacao.</li>
+          <li><strong>p95 API:</strong> percentil 95 sintetico da latencia.</li>
+          <li><strong>Alertas ativos:</strong> quantidade de regras disparadas no cenario atual.</li>
+        </ul>
+        <h3>Graficos</h3>
+        <ul>
+          <li>Fluxo diario compara creditos e debitos por data.</li>
+          <li>Banco req/s mostra leitura, escrita e total de requisicoes.</li>
+          <li>Latencia mostra p50, p95 e p99.</li>
+          <li>Filas e projecao mostra outbox, Rabbit, projetados e duplicados.</li>
+        </ul>
+      </section>
+
+      <section id="lancamentos">
+        <h2>Lancamentos</h2>
+        <p>O painel <code>Novo lancamento</code> registra movimentacoes reais no UAT.</p>
+        <ol>
+          <li>Escolha <code>Credito</code> ou <code>Debito</code>.</li>
+          <li>Selecione a conta.</li>
+          <li>Informe o valor, por exemplo <code>150,00</code> ou <code>150.00</code>.</li>
+          <li>Escolha a data de negocio.</li>
+          <li>Preencha a descricao.</li>
+          <li>Opcionalmente selecione um cliente.</li>
+          <li>Clique em <code>Registrar lancamento</code>.</li>
+        </ol>
+        <p>A API recebe o payload em <code>POST /api/entries/entries</code> com <code>Idempotency-Key</code>.</p>
+      </section>
+
+      <section id="monitoramento">
+        <h2>Monitoramento</h2>
+        <p>As metricas exibidas sao fornecidas pela Observability Simulation API e sao rotuladas como sinteticas.</p>
+        <ul>
+          <li><code>GET /health/live</code>: processo vivo.</li>
+          <li><code>GET /health/ready</code>: entrada pronta.</li>
+          <li><code>GET /api/observability/scenarios</code>: cenarios disponiveis.</li>
+          <li><code>GET /api/observability/samples</code>: amostra sintetica.</li>
+          <li><code>GET /api/observability/stream</code>: stream SSE de amostras.</li>
+        </ul>
+      </section>
+
+      <section id="alertas">
+        <h2>Controle de alertas</h2>
+        <p>O painel permite ligar e silenciar regras visuais de operacao.</p>
+        <ul>
+          <li>Latencia p95 acima do limite.</li>
+          <li>Outbox pendente acima do limite.</li>
+          <li>Banco req/s acima do limite.</li>
+          <li>Erros 5xx.</li>
+          <li>Rate limit 429.</li>
+          <li>Error budget abaixo do limite.</li>
+        </ul>
+      </section>
+
+      <section id="carga">
+        <h2>Teste de carga</h2>
+        <p>O menu de carga muda o cenario sintetico, sem executar carga real contra o servidor publico.</p>
+        <table>
+          <thead><tr><th>Cenario</th><th>Uso</th></tr></thead>
+          <tbody>
+            <tr><td>Normal</td><td>Operacao estavel.</td></tr>
+            <tr><td>Carga 50</td><td>Volume moderado.</td></tr>
+            <tr><td>Carga 100</td><td>Volume alto, com alerta de banco/error budget.</td></tr>
+            <tr><td>Pico 200</td><td>Pico agressivo com erros e latencia elevados.</td></tr>
+            <tr><td>Recuperacao</td><td>Retorno operacional apos acumulacao de fila.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="swagger">
+        <h2>Swagger e API</h2>
+        <p>Use <a href="/swagger">/swagger</a> para ver todas as rotas, schemas, exemplos, headers e status codes.</p>
+        <p>Headers de negocio usados pela SPA e exemplos:</p>
+        <pre>X-Tenant-Id: org-alpha
+X-User-Id: user-admin-alpha
+Content-Type: application/json</pre>
+      </section>
+
+      <section id="seguranca">
+        <h2>Seguranca</h2>
+        <ul>
+          <li>BFF como fronteira publica.</li>
+          <li>Login com senha e reCAPTCHA validado no servidor.</li>
+          <li>Secrets fora do Git em <code>.secrets/{env}</code>.</li>
+          <li>Portas locais em <code>127.0.0.1</code> e publicacao via Cloudflare Tunnel.</li>
+          <li>Containers nao-root, filesystem read-only, <code>no-new-privileges</code> e <code>cap_drop: ALL</code>.</li>
+          <li>Idempotencia em lancamentos e auditoria basica.</li>
+          <li>Outbox antes da consolidacao.</li>
+        </ul>
+        <p class="warning">O QR Code anti-IA depende de liberacao da Google no reCAPTCHA Fraud Defense. Hoje esta ativo o Google reCAPTCHA v2 checkbox.</p>
+      </section>
+
+      <section id="operacao">
+        <h2>Operacao local</h2>
+        <pre>./scripts/bootstrap.sh --env uat
+./scripts/build.sh --env uat
+./scripts/up.sh --env uat
+./scripts/test.sh --env uat
+./scripts/status.sh --env uat</pre>
+      </section>
+
+      <section id="troubleshooting">
+        <h2>Troubleshooting</h2>
+        <ul>
+          <li>Site nao abre: verifique <code>teste-pratico-web</code> e acesse <code>http://127.0.0.1:6230</code>.</li>
+          <li>API nao responde: verifique <code>/health/ready</code> e logs do <code>teste-pratico-bff</code>.</li>
+          <li>Login falha: confirme as credenciais e resolva o reCAPTCHA.</li>
+          <li>Graficos sem dados: valide <code>/api/observability/samples?scenario=NORMAL</code>.</li>
+        </ul>
+      </section>
+
+      <section id="limites" class="danger">
+        <h2>Limites conhecidos</h2>
+        <ul>
+          <li>Storage atual e file-backed em <code>.runtime/uat</code>.</li>
+          <li>Telemetria e teste de carga do dashboard sao sinteticos.</li>
+          <li>k6 real existe, mas nao foi executado contra o ambiente publico.</li>
+          <li>QR Code do Google depende de allowlist externa.</li>
+          <li><code>uat.vertx.dwilon.com</code> pode exigir certificado Cloudflare avancado/customizado.</li>
+        </ul>
+      </section>
+    </main>
+  </body>
+</html>

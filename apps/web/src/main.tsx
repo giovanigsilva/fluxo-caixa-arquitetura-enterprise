@@ -243,6 +243,9 @@ function LoginScreen({ onAuthenticated }: { onAuthenticated: (session: LoginSess
             <LogIn size={18} /> Entrar
           </button>
         </form>
+        <a className="manual-link" href="/manual.html" target="_blank" rel="noreferrer">
+          <FileText size={16} /> Manual de uso
+        </a>
 
         {error && <p className="error">{error}</p>}
       </section>
@@ -333,6 +336,7 @@ function Shell({ session, onLogout }: { session: LoginSession; onLogout: () => v
           <a href="#loadtest"><Zap size={18} /><span>Teste de carga</span><small>Cenários sintéticos</small></a>
           <a href="#entries"><Banknote size={18} /><span>Lançamentos</span><small>Débito e crédito</small></a>
           <a href="#customers"><Building2 size={18} /><span>Clientes</span><small>Cadastro UAT</small></a>
+          <a href="/manual.html" target="_blank" rel="noreferrer"><FileText size={18} /><span>Manual</span><small>Instruções completas</small></a>
         </nav>
         <div className="sidebar-status">
           <span><CheckCircle2 size={16} /> Sistema ready</span>

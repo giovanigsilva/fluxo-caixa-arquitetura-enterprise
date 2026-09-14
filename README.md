@@ -76,6 +76,7 @@ recusadas pelo BFF.
 Produção pública de avaliação:
 
 - Aplicação: <https://vertx.dwilon.com/>
+- Manual de uso: <https://vertx.dwilon.com/manual.html>
 - Swagger UI: <https://vertx.dwilon.com/swagger>
 - OpenAPI JSON: <https://vertx.dwilon.com/openapi/v1.json>
 - Health ready: <https://vertx.dwilon.com/health/ready>
@@ -83,6 +84,7 @@ Produção pública de avaliação:
 UAT:
 
 - Frontend local: <http://127.0.0.1:6230>
+- Manual local: <http://127.0.0.1:6230/manual.html>
 - BFF/API local: <http://127.0.0.1:6210>
 - Swagger UI local: <http://127.0.0.1:6210/swagger>
 - OpenAPI JSON local: <http://127.0.0.1:6210/openapi/v1.json>
@@ -587,6 +589,7 @@ Domínios da entrega:
 
 Links públicos de documentação:
 
+- Manual de uso: `https://vertx.dwilon.com/manual.html`
 - Swagger UI: `https://vertx.dwilon.com/swagger`
 - OpenAPI JSON: `https://vertx.dwilon.com/openapi/v1.json`
 - Health ready: `https://vertx.dwilon.com/health/ready`
@@ -714,6 +717,7 @@ Refazer tudo do zero sem apagar volumes manualmente:
 ## Documentação adicional
 
 - `docs/architecture/definition.md`
+- `docs/manual-de-uso.md`
 - `docs/architecture/baseline-delta.md`
 - `docs/api/README.md`
 - `docs/security/threat-model.md`
