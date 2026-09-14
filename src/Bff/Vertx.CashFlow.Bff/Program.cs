@@ -1,13 +1,17 @@
-using System.Buffers.Binary;
-using System.Globalization;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
-using Microsoft.AspNetCore.Mvc;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Vertx.CashFlow.BuildingBlocks;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddHttpClient("proxy", client => client.Timeout = TimeSpan.FromSeconds(20));
+builder.Services.AddHttpClient("recaptcha", client =>
+{
+    client.BaseAddress = new Uri("https://www.google.com/");
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
 builder.Services.AddProblemDetails();
 builder.Services.AddSingleton(FileCashFlowStore.FromEnvironment(builder.Environment.EnvironmentName));
 
@@ -20,18 +24,58 @@ app.MapGet("/swagger/index.html", () => Results.Text(SwaggerDocumentation.Html, 
     .ExcludeFromDescription();
 app.MapGet("/", () => Results.Ok(new { name = "Fluxo de Caixa", bff = "ready" }));
 app.MapGet("/health/live", () => Results.Ok(new { status = "live" }));
-app.MapGet("/health/ready", () => Results.Ok(new { status = "ready", auth = "password-totp-local" }));
+app.MapGet("/health/ready", () => Results.Ok(new { status = "ready", auth = "password-recaptcha-v2" }));
 
 var auth = app.MapGroup("/bff/login").WithTags("Login approval");
 
-auth.MapPost("/start", async (FileCashFlowStore store, LoginStartRequest request, CancellationToken ct) =>
+auth.MapGet("/recaptcha/config", () =>
 {
+    var recaptcha = RecaptchaConfig.FromEnvironment();
+    return Results.Ok(new RecaptchaConfigResponse(
+        "google-recaptcha-v2-checkbox",
+        recaptcha is not null,
+        recaptcha?.SiteKey));
+})
+.WithSummary("Retorna a configuração pública do reCAPTCHA v2.");
+
+auth.MapPost("/start", async (FileCashFlowStore store, IHttpClientFactory factory, HttpContext context, LoginStartRequest request, CancellationToken ct) =>
+{
+    var validationErrors = new Dictionary<string, string[]>();
     if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
     {
-        return Results.ValidationProblem(new Dictionary<string, string[]>
-        {
-            ["credentials"] = ["Informe login e senha."]
-        });
+        validationErrors["credentials"] = ["Informe login e senha."];
+    }
+
+    if (string.IsNullOrWhiteSpace(request.RecaptchaToken))
+    {
+        validationErrors["recaptchaToken"] = ["Confirme o reCAPTCHA."];
+    }
+
+    if (validationErrors.Count > 0)
+    {
+        return Results.ValidationProblem(validationErrors);
+    }
+
+    var email = request.Email!;
+    var password = request.Password!;
+    var recaptchaToken = request.RecaptchaToken!;
+    var recaptcha = RecaptchaConfig.FromEnvironment();
+    if (recaptcha is null)
+    {
+        return Results.Problem("reCAPTCHA do BFF não configurado.", statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
+
+    var verification = await RecaptchaVerifier.VerifyAsync(
+        factory.CreateClient("recaptcha"),
+        recaptcha,
+        recaptchaToken,
+        context.Connection.RemoteIpAddress?.ToString(),
+        ct);
+    if (!verification.Success)
+    {
+        return Results.Problem(
+            verification.Unavailable ? "Serviço reCAPTCHA indisponível." : "Falha na validação reCAPTCHA.",
+            statusCode: verification.Unavailable ? StatusCodes.Status503ServiceUnavailable : StatusCodes.Status403Forbidden);
     }
 
     var credentials = LoginCredentials.FromEnvironment();
@@ -40,116 +84,27 @@ auth.MapPost("/start", async (FileCashFlowStore store, LoginStartRequest request
         return Results.Problem("Credencial local do BFF não configurada.", statusCode: StatusCodes.Status503ServiceUnavailable);
     }
 
-    if (!credentials.Verify(request.Email, request.Password))
+    if (!credentials.Verify(email, password))
     {
         return Results.Problem("Login ou senha inválidos.", statusCode: StatusCodes.Status401Unauthorized);
     }
 
-    var secret = Base64Url(RandomNumberGenerator.GetBytes(32));
-    var matchCode = RandomNumberGenerator.GetInt32(100000, 999999).ToString(System.Globalization.CultureInfo.InvariantCulture);
-    var totpSecret = Totp.CreateSecret();
-    var challengeId = $"lac_{Guid.NewGuid():N}";
     var sessionId = $"ps_{Guid.NewGuid():N}";
-    var expiresAt = DateTimeOffset.UtcNow.AddSeconds(120);
-    var totpUri = Totp.CreateOtpAuthUri(credentials.Issuer, credentials.Email, totpSecret);
-    var displayName = "Administrador";
-
-    var result = await store.MutateAsync(state =>
-    {
-        var user = state.Users.FirstOrDefault(item => item.Id == credentials.UserId && !item.Disabled);
-        if (user is null)
-        {
-            return Results.Problem("Usuário local não encontrado ou desativado.", statusCode: StatusCodes.Status503ServiceUnavailable);
-        }
-
-        displayName = user.DisplayName;
-        state.LoginChallenges.Add(new LoginApprovalChallenge
-        {
-            Id = challengeId,
-            UserId = credentials.UserId,
-            PendingSessionId = sessionId,
-            SecretHash = FileCashFlowStore.HashSecret(secret),
-            MatchCode = matchCode,
-            TotpSecretBase32 = totpSecret,
-            ExpiresAt = expiresAt
-        });
-        return Results.Ok(new LoginStartResponse(
-            challengeId,
-            sessionId,
-            matchCode,
-            $"https://{credentials.ApprovalHost}/aprovar-login#{challengeId}.{secret}",
-            totpUri,
-            credentials.Issuer,
-            displayName,
-            expiresAt));
-    }, ct);
-
-    return result;
-})
-.WithSummary("Valida senha e cria challenge TOTP por QR Code compatível com Google Authenticator.");
-
-auth.MapGet("/status/{challengeId}", async (FileCashFlowStore store, string challengeId, CancellationToken ct) =>
-{
     var state = await store.ReadAsync(ct);
-    var challenge = state.LoginChallenges.FirstOrDefault(item => item.Id == challengeId);
-    if (challenge is null)
+    var user = state.Users.FirstOrDefault(item => item.Id == credentials.UserId && !item.Disabled);
+    if (user is null)
     {
-        return Results.NotFound();
+        return Results.Problem("Usuário local não encontrado ou desativado.", statusCode: StatusCodes.Status503ServiceUnavailable);
     }
 
-    var status = challenge.ApprovedAt is not null
-        ? "approved"
-        : challenge.DeniedAt is not null
-            ? "denied"
-            : challenge.ExpiresAt <= DateTimeOffset.UtcNow ? "expired" : "pending";
-    return Results.Ok(new { challengeId, status, challenge.ExpiresAt });
+    return Results.Ok(new LoginSessionResponse(
+        "approved",
+        sessionId,
+        credentials.UserId,
+        user.DisplayName,
+        DateTimeOffset.UtcNow.AddHours(8)));
 })
-.WithSummary("Consulta aprovação da sessão desktop pendente.");
-
-auth.MapPost("/approve", async (FileCashFlowStore store, LoginApproveRequest request, CancellationToken ct) =>
-{
-    var approved = await store.MutateAsync(state =>
-    {
-        var challenge = state.LoginChallenges.FirstOrDefault(item => item.Id == request.ChallengeId);
-        if (challenge is null)
-        {
-            return Results.NotFound();
-        }
-
-        if (challenge.ApprovedAt is not null || challenge.DeniedAt is not null || challenge.ExpiresAt <= DateTimeOffset.UtcNow)
-        {
-            return Results.Problem("Challenge expirado ou já consumido.", statusCode: StatusCodes.Status409Conflict);
-        }
-
-        var legacyApproval = !string.IsNullOrWhiteSpace(request.UserId)
-            && !string.IsNullOrWhiteSpace(request.Secret)
-            && !string.IsNullOrWhiteSpace(request.MatchCode)
-            && string.Equals(challenge.UserId, request.UserId, StringComparison.Ordinal)
-            && string.Equals(challenge.MatchCode, request.MatchCode, StringComparison.Ordinal)
-            && string.Equals(challenge.SecretHash, FileCashFlowStore.HashSecret(request.Secret), StringComparison.Ordinal);
-        var totpApproval = !string.IsNullOrWhiteSpace(request.TotpCode)
-            && !string.IsNullOrWhiteSpace(challenge.TotpSecretBase32)
-            && Totp.Verify(challenge.TotpSecretBase32, request.TotpCode);
-
-        if (!legacyApproval && !totpApproval)
-        {
-            challenge.DeniedAt = DateTimeOffset.UtcNow;
-            return Results.Problem("Aprovação recusada.", statusCode: StatusCodes.Status403Forbidden);
-        }
-
-        challenge.ApprovedAt = DateTimeOffset.UtcNow;
-        var user = state.Users.FirstOrDefault(item => item.Id == challenge.UserId);
-        return Results.Ok(new LoginApproveResponse(
-            "approved",
-            challenge.PendingSessionId,
-            challenge.UserId,
-            user?.DisplayName ?? "Administrador",
-            DateTimeOffset.UtcNow.AddHours(8)));
-    }, ct);
-
-    return approved;
-})
-.WithSummary("Aprova challenge com TOTP do QR Code ou com o contrato legado de segredo e código.");
+.WithSummary("Valida senha e token Google reCAPTCHA v2 para liberar a sessão web.");
 
 MapProxy(app, "/api/entries/{**path}", "ENTRIES_URL", "http://127.0.0.1:6222", "/api/v1/");
 MapProxy(app, "/api/management/{**path}", "MANAGEMENT_URL", "http://127.0.0.1:6221", "/api/v1/");
@@ -205,23 +160,11 @@ static void MapProxy(WebApplication app, string pattern, string envName, string 
     .WithSummary($"Proxy fixo para {envName}.");
 }
 
-static string Base64Url(byte[] bytes)
-    => Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+internal sealed record RecaptchaConfigResponse(string Provider, bool Enabled, string? SiteKey);
+internal sealed record LoginStartRequest(string? Email, string? Password, string? RecaptchaToken);
+internal sealed record LoginSessionResponse(string Status, string PendingSessionId, string UserId, string DisplayName, DateTimeOffset ExpiresAt);
 
-internal sealed record LoginStartRequest(string? Email, string? Password);
-internal sealed record LoginStartResponse(
-    string ChallengeId,
-    string PendingSessionId,
-    string MatchCode,
-    string ApprovalUrl,
-    string TotpUri,
-    string TotpIssuer,
-    string DisplayName,
-    DateTimeOffset ExpiresAt);
-internal sealed record LoginApproveRequest(string ChallengeId, string? UserId, string? Secret, string? MatchCode, string? TotpCode);
-internal sealed record LoginApproveResponse(string Status, string PendingSessionId, string UserId, string DisplayName, DateTimeOffset ExpiresAt);
-
-internal sealed record LoginCredentials(string Email, string PasswordSha256, string UserId, string Issuer, string ApprovalHost)
+internal sealed record LoginCredentials(string Email, string PasswordSha256, string UserId)
 {
     public static LoginCredentials? FromEnvironment()
     {
@@ -235,9 +178,7 @@ internal sealed record LoginCredentials(string Email, string PasswordSha256, str
         return new LoginCredentials(
             email.Trim(),
             passwordSha256,
-            Environment.GetEnvironmentVariable("VERTX_LOGIN_USER_ID") ?? SeedFactory.AdminUserId,
-            Environment.GetEnvironmentVariable("VERTX_LOGIN_TOTP_ISSUER") ?? "Vertx CashFlow",
-            Environment.GetEnvironmentVariable("VERTX_LOGIN_APPROVAL_HOST") ?? "vertx.dwilon.com");
+            Environment.GetEnvironmentVariable("VERTX_LOGIN_USER_ID") ?? SeedFactory.AdminUserId);
     }
 
     public bool Verify(string email, string password)
@@ -272,104 +213,88 @@ internal sealed record LoginCredentials(string Email, string PasswordSha256, str
     }
 }
 
-internal static class Totp
+internal sealed record RecaptchaConfig(string SiteKey, string SecretKey, string[] AllowedHosts)
 {
-    private const string Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-    private const int TimeStepSeconds = 30;
-
-    public static string CreateSecret()
+    public static RecaptchaConfig? FromEnvironment()
     {
-        var bytes = RandomNumberGenerator.GetBytes(20);
-        return ToBase32(bytes);
-    }
-
-    public static string CreateOtpAuthUri(string issuer, string accountName, string secret)
-    {
-        var label = $"{issuer}:{accountName}";
-        return $"otpauth://totp/{Uri.EscapeDataString(label)}?secret={secret}&issuer={Uri.EscapeDataString(issuer)}&algorithm=SHA1&digits=6&period={TimeStepSeconds}";
-    }
-
-    public static bool Verify(string secret, string code)
-    {
-        var normalized = new string(code.Where(char.IsDigit).ToArray());
-        if (normalized.Length != 6)
+        var siteKey = Environment.GetEnvironmentVariable("VERTX_RECAPTCHA_SITE_KEY");
+        var secretKey = Environment.GetEnvironmentVariable("VERTX_RECAPTCHA_SECRET_KEY");
+        if (string.IsNullOrWhiteSpace(siteKey) || string.IsNullOrWhiteSpace(secretKey))
         {
-            return false;
+            return null;
         }
 
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds() / TimeStepSeconds;
-        for (var offset = -1; offset <= 1; offset++)
-        {
-            if (string.Equals(GenerateCode(secret, now + offset), normalized, StringComparison.Ordinal))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static string GenerateCode(string secret, long counter)
-    {
-        var key = FromBase32(secret);
-        Span<byte> counterBytes = stackalloc byte[8];
-        BinaryPrimitives.WriteInt64BigEndian(counterBytes, counter);
-        using var hmac = new HMACSHA1(key);
-        var hash = hmac.ComputeHash(counterBytes.ToArray());
-        var offset = hash[^1] & 0x0f;
-        var binary = ((hash[offset] & 0x7f) << 24)
-            | ((hash[offset + 1] & 0xff) << 16)
-            | ((hash[offset + 2] & 0xff) << 8)
-            | (hash[offset + 3] & 0xff);
-        return (binary % 1_000_000).ToString("D6", CultureInfo.InvariantCulture);
-    }
-
-    private static string ToBase32(byte[] bytes)
-    {
-        var output = new StringBuilder((bytes.Length + 4) / 5 * 8);
-        var buffer = 0;
-        var bitsLeft = 0;
-        foreach (var value in bytes)
-        {
-            buffer = (buffer << 8) | value;
-            bitsLeft += 8;
-            while (bitsLeft >= 5)
-            {
-                output.Append(Alphabet[(buffer >> (bitsLeft - 5)) & 31]);
-                bitsLeft -= 5;
-            }
-        }
-
-        if (bitsLeft > 0)
-        {
-            output.Append(Alphabet[(buffer << (5 - bitsLeft)) & 31]);
-        }
-
-        return output.ToString();
-    }
-
-    private static byte[] FromBase32(string value)
-    {
-        var buffer = 0;
-        var bitsLeft = 0;
-        var bytes = new List<byte>();
-        foreach (var character in value.Trim().TrimEnd('=').ToUpperInvariant())
-        {
-            var index = Alphabet.IndexOf(character, StringComparison.Ordinal);
-            if (index < 0)
-            {
-                continue;
-            }
-
-            buffer = (buffer << 5) | index;
-            bitsLeft += 5;
-            if (bitsLeft >= 8)
-            {
-                bytes.Add((byte)((buffer >> (bitsLeft - 8)) & 255));
-                bitsLeft -= 8;
-            }
-        }
-
-        return bytes.ToArray();
+        var hosts = (Environment.GetEnvironmentVariable("VERTX_RECAPTCHA_ALLOWED_HOSTS")
+                ?? "vertx.dwilon.com,uat.vertx.dwilon.com,localhost,127.0.0.1")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return new RecaptchaConfig(siteKey.Trim(), secretKey.Trim(), hosts);
     }
 }
+
+internal sealed record RecaptchaVerificationResult(bool Success, bool Unavailable, string[] ErrorCodes);
+
+internal static class RecaptchaVerifier
+{
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
+    public static async Task<RecaptchaVerificationResult> VerifyAsync(
+        HttpClient client,
+        RecaptchaConfig config,
+        string token,
+        string? remoteIp,
+        CancellationToken cancellationToken)
+    {
+        var form = new Dictionary<string, string>
+        {
+            ["secret"] = config.SecretKey,
+            ["response"] = token
+        };
+
+        if (!string.IsNullOrWhiteSpace(remoteIp))
+        {
+            form["remoteip"] = remoteIp;
+        }
+
+        try
+        {
+            using var response = await client.PostAsync("recaptcha/api/siteverify", new FormUrlEncodedContent(form), cancellationToken).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                return new RecaptchaVerificationResult(false, true, ["recaptcha.http"]);
+            }
+
+            var payload = await JsonSerializer.DeserializeAsync<RecaptchaVerificationResponse>(
+                    await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false),
+                    JsonOptions,
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            if (payload is null || !payload.Success)
+            {
+                return new RecaptchaVerificationResult(false, false, payload?.ErrorCodes ?? ["recaptcha.invalid"]);
+            }
+
+            if (!string.IsNullOrWhiteSpace(payload.Hostname)
+                && !config.AllowedHosts.Contains(payload.Hostname, StringComparer.OrdinalIgnoreCase))
+            {
+                return new RecaptchaVerificationResult(false, false, ["recaptcha.hostname"]);
+            }
+
+            return new RecaptchaVerificationResult(true, false, []);
+        }
+        catch (HttpRequestException)
+        {
+            return new RecaptchaVerificationResult(false, true, ["recaptcha.unavailable"]);
+        }
+        catch (TaskCanceledException)
+        {
+            return new RecaptchaVerificationResult(false, true, ["recaptcha.timeout"]);
+        }
+    }
+}
+
+internal sealed record RecaptchaVerificationResponse(
+    [property: JsonPropertyName("success")] bool Success,
+    [property: JsonPropertyName("challenge_ts")] DateTimeOffset? ChallengeTs,
+    [property: JsonPropertyName("hostname")] string? Hostname,
+    [property: JsonPropertyName("error-codes")] string[]? ErrorCodes);

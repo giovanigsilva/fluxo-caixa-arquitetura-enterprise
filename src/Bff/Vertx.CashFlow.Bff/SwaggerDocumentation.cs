@@ -45,7 +45,7 @@ internal static class SwaggerDocumentation
   "info": {
     "title": "Vertx CashFlow Public API",
     "version": "v1",
-    "description": "Swagger completo da superfície pública do BFF do Fluxo de Caixa Vertx. Todas as rotas abaixo são chamadas pelo BFF e encaminhadas aos serviços internos correspondentes. A entrada web usa login local com senha e TOTP por QR Code compatível com Google Authenticator; as rotas de negócio desta fatia técnica ainda recebem tenant e usuário por headers."
+    "description": "Swagger completo da superfície pública do BFF do Fluxo de Caixa Vertx. Todas as rotas abaixo são chamadas pelo BFF e encaminhadas aos serviços internos correspondentes. A entrada web usa login local com senha e Google reCAPTCHA v2 checkbox; as rotas de negócio desta fatia técnica ainda recebem tenant e usuário por headers."
   },
   "servers": [
     {
@@ -68,7 +68,7 @@ internal static class SwaggerDocumentation
     },
     {
       "name": "Login approval",
-      "description": "Login local com senha e validação TOTP por QR Code compatível com Google Authenticator."
+      "description": "Login local com senha e validação Google reCAPTCHA v2 checkbox."
     },
     {
       "name": "Entries - customers",
@@ -152,9 +152,20 @@ internal static class SwaggerDocumentation
         "tags": ["Health"],
         "operationId": "getReadyHealth",
         "summary": "Readiness do BFF",
-        "description": "Usado para smoke test e publicação pública. Nesta fatia, a entrada web usa senha local e TOTP por QR Code.",
+        "description": "Usado para smoke test e publicação pública. Nesta fatia, a entrada web usa senha local e Google reCAPTCHA v2 checkbox.",
         "responses": {
           "200": { "$ref": "#/components/responses/ReadyHealth" }
+        }
+      }
+    },
+    "/bff/login/recaptcha/config": {
+      "get": {
+        "tags": ["Login approval"],
+        "operationId": "getRecaptchaConfig",
+        "summary": "Obtém configuração pública do reCAPTCHA",
+        "description": "Retorna a site key pública e indica se o Google reCAPTCHA v2 checkbox está habilitado no BFF.",
+        "responses": {
+          "200": { "$ref": "#/components/responses/RecaptchaConfigResponse" }
         }
       }
     },
@@ -162,62 +173,27 @@ internal static class SwaggerDocumentation
       "post": {
         "tags": ["Login approval"],
         "operationId": "startLoginApproval",
-        "summary": "Valida senha e cria QR TOTP",
-        "description": "Valida login e senha locais do BFF, cria um challenge temporário e retorna uma URI otpauth para QR Code compatível com Google Authenticator.",
+        "summary": "Valida senha e reCAPTCHA",
+        "description": "Valida login, senha e token Google reCAPTCHA v2 checkbox para liberar a sessão web.",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": { "$ref": "#/components/schemas/LoginStartRequest" },
-              "example": { "email": "admin@admin.com", "password": "senha-local" }
-            }
-          }
-        },
-        "responses": {
-          "200": { "$ref": "#/components/responses/LoginStartResponse" },
-          "400": { "$ref": "#/components/responses/BadRequest" },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
-        }
-      }
-    },
-    "/bff/login/status/{challengeId}": {
-      "get": {
-        "tags": ["Login approval"],
-        "operationId": "getLoginApprovalStatus",
-        "summary": "Consulta status do challenge",
-        "description": "Retorna pending, approved, denied ou expired para uma sessão pendente.",
-        "parameters": [
-          { "$ref": "#/components/parameters/ChallengeIdPath" }
-        ],
-        "responses": {
-          "200": { "$ref": "#/components/responses/LoginStatusResponse" },
-          "404": { "$ref": "#/components/responses/NotFound" }
-        }
-      }
-    },
-    "/bff/login/approve": {
-      "post": {
-        "tags": ["Login approval"],
-        "operationId": "approveLoginChallenge",
-        "summary": "Aprova challenge",
-        "description": "Consome o challenge com o código TOTP de 6 dígitos gerado a partir do QR Code. O contrato legado com userId, secret e matchCode continua aceito.",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/LoginApproveRequest" },
               "example": {
-                "challengeId": "lac_00000000000000000000000000000000",
-                "totpCode": "123456"
+                "email": "admin@admin.com",
+                "password": "senha-local",
+                "recaptchaToken": "token-gerado-pelo-widget-google"
               }
             }
           }
         },
         "responses": {
-          "200": { "$ref": "#/components/responses/LoginApproveResponse" },
+          "200": { "$ref": "#/components/responses/LoginSessionResponse" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
           "403": { "$ref": "#/components/responses/Forbidden" },
-          "409": { "$ref": "#/components/responses/Conflict" }
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
         }
       }
     },
@@ -760,14 +736,6 @@ internal static class SwaggerDocumentation
         "description": "Identificador do recurso.",
         "schema": { "type": "string" },
         "example": "ent_00000000000000000000000000000000"
-      },
-      "ChallengeIdPath": {
-        "name": "challengeId",
-        "in": "path",
-        "required": true,
-        "description": "Identificador do challenge de aprovação.",
-        "schema": { "type": "string" },
-        "example": "lac_00000000000000000000000000000000"
       }
     },
     "requestBodies": {
@@ -899,31 +867,23 @@ internal static class SwaggerDocumentation
         "content": {
           "application/json": {
             "schema": { "$ref": "#/components/schemas/ReadyHealthResponse" },
-            "example": { "status": "ready", "auth": "password-totp-local" }
+            "example": { "status": "ready", "auth": "password-recaptcha-v2" }
           }
         }
       },
-      "LoginStartResponse": {
-        "description": "Challenge criado.",
+      "RecaptchaConfigResponse": {
+        "description": "Configuração pública do Google reCAPTCHA v2.",
         "content": {
           "application/json": {
-            "schema": { "$ref": "#/components/schemas/LoginStartResponse" }
+            "schema": { "$ref": "#/components/schemas/RecaptchaConfigResponse" }
           }
         }
       },
-      "LoginStatusResponse": {
-        "description": "Status do challenge.",
-        "content": {
-          "application/json": {
-            "schema": { "$ref": "#/components/schemas/LoginStatusResponse" }
-          }
-        }
-      },
-      "LoginApproveResponse": {
+      "LoginSessionResponse": {
         "description": "Sessão aprovada.",
         "content": {
           "application/json": {
-            "schema": { "$ref": "#/components/schemas/LoginApproveResponse" }
+            "schema": { "$ref": "#/components/schemas/LoginSessionResponse" }
           }
         }
       },
@@ -1107,52 +1067,28 @@ internal static class SwaggerDocumentation
         "required": ["status", "auth"],
         "properties": {
           "status": { "type": "string", "example": "ready" },
-          "auth": { "type": "string", "example": "password-totp-local" }
+          "auth": { "type": "string", "example": "password-recaptcha-v2" }
+        }
+      },
+      "RecaptchaConfigResponse": {
+        "type": "object",
+        "required": ["provider", "enabled"],
+        "properties": {
+          "provider": { "type": "string", "enum": ["google-recaptcha-v2-checkbox"], "example": "google-recaptcha-v2-checkbox" },
+          "enabled": { "type": "boolean", "example": true },
+          "siteKey": { "type": "string", "nullable": true, "description": "Site key pública emitida pelo Google reCAPTCHA." }
         }
       },
       "LoginStartRequest": {
         "type": "object",
-        "required": ["email", "password"],
+        "required": ["email", "password", "recaptchaToken"],
         "properties": {
           "email": { "type": "string", "format": "email", "example": "admin@admin.com" },
-          "password": { "type": "string", "format": "password", "writeOnly": true, "example": "senha-local" }
+          "password": { "type": "string", "format": "password", "writeOnly": true, "example": "senha-local" },
+          "recaptchaToken": { "type": "string", "writeOnly": true, "description": "Token retornado pelo widget Google reCAPTCHA v2 checkbox no navegador." }
         }
       },
-      "LoginStartResponse": {
-        "type": "object",
-        "required": ["challengeId", "pendingSessionId", "matchCode", "approvalUrl", "totpUri", "totpIssuer", "displayName", "expiresAt"],
-        "properties": {
-          "challengeId": { "type": "string", "example": "lac_00000000000000000000000000000000" },
-          "pendingSessionId": { "type": "string", "example": "ps_00000000000000000000000000000000" },
-          "matchCode": { "type": "string", "example": "123456" },
-          "approvalUrl": { "type": "string", "format": "uri", "example": "https://vertx.dwilon.com/aprovar-login#lac_000.secret" },
-          "totpUri": { "type": "string", "format": "uri", "example": "otpauth://totp/Vertx%20CashFlow%3Aadmin%40admin.com?secret=JBSWY3DPEHPK3PXP&issuer=Vertx%20CashFlow&algorithm=SHA1&digits=6&period=30" },
-          "totpIssuer": { "type": "string", "example": "Vertx CashFlow" },
-          "displayName": { "type": "string", "example": "Administrador Financeiro Alfa" },
-          "expiresAt": { "type": "string", "format": "date-time" }
-        }
-      },
-      "LoginStatusResponse": {
-        "type": "object",
-        "required": ["challengeId", "status", "expiresAt"],
-        "properties": {
-          "challengeId": { "type": "string" },
-          "status": { "type": "string", "enum": ["pending", "approved", "denied", "expired"], "example": "pending" },
-          "expiresAt": { "type": "string", "format": "date-time" }
-        }
-      },
-      "LoginApproveRequest": {
-        "type": "object",
-        "required": ["challengeId"],
-        "properties": {
-          "challengeId": { "type": "string" },
-          "totpCode": { "type": "string", "pattern": "^[0-9]{6}$", "example": "123456" },
-          "userId": { "type": "string", "nullable": true, "description": "Campo legado para aprovação por URL." },
-          "secret": { "type": "string", "nullable": true, "description": "Campo legado para aprovação por URL." },
-          "matchCode": { "type": "string", "nullable": true, "description": "Campo legado para aprovação por URL." }
-        }
-      },
-      "LoginApproveResponse": {
+      "LoginSessionResponse": {
         "type": "object",
         "required": ["status", "pendingSessionId", "userId", "displayName", "expiresAt"],
         "properties": {

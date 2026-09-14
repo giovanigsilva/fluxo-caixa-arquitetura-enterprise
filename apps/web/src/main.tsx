@@ -1,9 +1,8 @@
-import React, { FormEvent, useEffect, useState } from "react"
+import React, { FormEvent, useEffect, useRef, useState } from "react"
 import { createRoot } from "react-dom/client"
 import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import QRCode from "qrcode"
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
-import { Activity, Banknote, Building2, CircleDollarSign, Download, FileText, Gauge, KeyRound, LayoutDashboard, LogIn, QrCode, RefreshCw, ShieldCheck, Smartphone, Users } from "lucide-react"
+import { Activity, Banknote, Building2, CircleDollarSign, Download, FileText, Gauge, LayoutDashboard, LogIn, RefreshCw, ShieldCheck, Users } from "lucide-react"
 import "./styles.css"
 
 type Account = { id: string; name: string; currency: string }
@@ -11,15 +10,28 @@ type Customer = { id: string; legalName: string; tradeName?: string; version: nu
 type Entry = { id: string; accountId: string; type: "Credit" | "Debit"; amount: string; businessDate: string; description: string; reversalEntryId?: string }
 type DailyResponse = { lag: { outboxPending: number }, rows: Array<{ businessDate: string; credits: number; debits: number; dayMovement: number; entryCount: number }> }
 type ScenarioSample = { timestamp: string; scenarioId: string; metrics: { readRps: number; writeRps: number; p50Ms: number; p95Ms: number; p99Ms: number; outboxPending: number; rabbitReady: number; projectedEntries: number; errorBudgetRemaining: number | null } }
-type LoginStartResponse = { challengeId: string; pendingSessionId: string; matchCode: string; approvalUrl: string; totpUri: string; totpIssuer: string; displayName: string; expiresAt: string }
-type LoginApproveResponse = { status: "approved"; pendingSessionId: string; userId: string; displayName: string; expiresAt: string }
+type RecaptchaConfigResponse = { provider: "google-recaptcha-v2-checkbox"; enabled: boolean; siteKey?: string }
+type LoginSessionResponse = { status: "approved"; pendingSessionId: string; userId: string; displayName: string; expiresAt: string }
 type LoginSession = { pendingSessionId: string; userId: string; displayName: string; expiresAt: string }
+
+declare global {
+  interface Window {
+    grecaptcha?: {
+      ready(callback: () => void): void
+      render(container: HTMLElement, parameters: { sitekey: string }): number
+      getResponse(widgetId?: number): string
+      reset(widgetId?: number): void
+    }
+  }
+}
 
 const queryClient = new QueryClient()
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" })
 const tenantHeaders = { "X-Tenant-Id": "org-alpha", "X-User-Id": "user-admin-alpha" }
 const environmentName = window.location.hostname === "vertx.dwilon.com" ? "Produção" : "UAT"
 const sessionStorageKey = "vertx.cashflow.session"
+const recaptchaScriptUrl = "https://www.google.com/recaptcha/api.js?render=explicit&hl=pt-BR"
+let recaptchaScriptPromise: Promise<void> | null = null
 
 function request<T>(path: string, init?: RequestInit): Promise<T> {
   return fetch(path, {
@@ -76,68 +88,73 @@ function readStoredSession(): LoginSession | null {
 function LoginScreen({ onAuthenticated }: { onAuthenticated: (session: LoginSession) => void }) {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [totpCode, setTotpCode] = useState("")
-  const [challenge, setChallenge] = useState<LoginStartResponse | null>(null)
-  const [qrDataUrl, setQrDataUrl] = useState("")
+  const [recaptchaConfig, setRecaptchaConfig] = useState<RecaptchaConfigResponse | null>(null)
+  const [captchaReady, setCaptchaReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const captchaNode = useRef<HTMLDivElement | null>(null)
+  const captchaWidgetId = useRef<number | null>(null)
 
   useEffect(() => {
-    if (!challenge) {
-      setQrDataUrl("")
-      return
-    }
-
     let active = true
-    QRCode.toDataURL(challenge.totpUri, {
-      errorCorrectionLevel: "M",
-      margin: 2,
-      width: 236,
-      color: { dark: "#0f172a", light: "#ffffff" }
-    })
-      .then(dataUrl => {
+    request<RecaptchaConfigResponse>("/bff/login/recaptcha/config")
+      .then(config => {
         if (active) {
-          setQrDataUrl(dataUrl)
+          setRecaptchaConfig(config)
         }
       })
       .catch(() => {
         if (active) {
-          setError("Não foi possível gerar o QR Code.")
+          setError("reCAPTCHA não configurado.")
         }
       })
 
     return () => {
       active = false
     }
-  }, [challenge])
+  }, [])
+
+  useEffect(() => {
+    let active = true
+    if (!recaptchaConfig?.enabled || !recaptchaConfig.siteKey || !captchaNode.current || captchaWidgetId.current !== null) {
+      return () => {
+        active = false
+      }
+    }
+
+    loadRecaptchaScript()
+      .then(() => {
+        window.grecaptcha?.ready(() => {
+          if (active && captchaNode.current && recaptchaConfig.siteKey && captchaWidgetId.current === null) {
+            captchaWidgetId.current = window.grecaptcha?.render(captchaNode.current, { sitekey: recaptchaConfig.siteKey }) ?? null
+            setCaptchaReady(captchaWidgetId.current !== null)
+          }
+        })
+      })
+      .catch(() => {
+        if (active) {
+          setError("Não foi possível carregar o reCAPTCHA.")
+        }
+      })
+
+    return () => {
+      active = false
+    }
+  }, [recaptchaConfig])
 
   async function startLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError(null)
-    setTotpCode("")
 
-    try {
-      const nextChallenge = await request<LoginStartResponse>("/bff/login/start", {
-        method: "POST",
-        body: JSON.stringify({ email, password })
-      })
-      setChallenge(nextChallenge)
-    } catch (failure) {
-      setChallenge(null)
-      setError(readError(failure))
-    }
-  }
-
-  async function approveLogin(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!challenge) {
+    const recaptchaToken = window.grecaptcha?.getResponse(captchaWidgetId.current ?? undefined) ?? ""
+    if (!recaptchaToken) {
+      setError("Confirme o reCAPTCHA.")
       return
     }
 
-    setError(null)
     try {
-      const approved = await request<LoginApproveResponse>("/bff/login/approve", {
+      const approved = await request<LoginSessionResponse>("/bff/login/start", {
         method: "POST",
-        body: JSON.stringify({ challengeId: challenge.challengeId, totpCode })
+        body: JSON.stringify({ email, password, recaptchaToken })
       })
       onAuthenticated({
         pendingSessionId: approved.pendingSessionId,
@@ -146,9 +163,8 @@ function LoginScreen({ onAuthenticated }: { onAuthenticated: (session: LoginSess
         expiresAt: approved.expiresAt
       })
     } catch (failure) {
+      window.grecaptcha?.reset(captchaWidgetId.current ?? undefined)
       setError(readError(failure))
-      setChallenge(null)
-      setTotpCode("")
     }
   }
 
@@ -168,43 +184,20 @@ function LoginScreen({ onAuthenticated }: { onAuthenticated: (session: LoginSess
           <h1 id="login-title">Acesso operacional</h1>
         </div>
 
-        {!challenge ? (
-          <form className="login-form" onSubmit={startLogin}>
-            <label className="field">
-              <span>Login</span>
-              <input value={email} onChange={event => setEmail(event.target.value)} type="email" autoComplete="username" required />
-            </label>
-            <label className="field">
-              <span>Senha</span>
-              <input value={password} onChange={event => setPassword(event.target.value)} type="password" autoComplete="current-password" required />
-            </label>
-            <button type="submit">
-              <LogIn size={18} /> Entrar
-            </button>
-          </form>
-        ) : (
-          <form className="login-form" onSubmit={approveLogin}>
-            <div className="qr-zone">
-              <div className="qr-frame">
-                {qrDataUrl ? <img src={qrDataUrl} alt="QR Code TOTP" /> : <QrCode size={64} />}
-              </div>
-              <div className="qr-meta">
-                <span><Smartphone size={16} /> {challenge.totpIssuer}</span>
-                <strong>{challenge.displayName}</strong>
-              </div>
-            </div>
-            <label className="field">
-              <span>Código do Google Authenticator</span>
-              <input value={totpCode} onChange={event => setTotpCode(event.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" pattern="[0-9]{6}" autoComplete="one-time-code" required />
-            </label>
-            <button type="submit" disabled={totpCode.length !== 6}>
-              <KeyRound size={18} /> Validar QR
-            </button>
-            <button className="text-button" type="button" onClick={() => setChallenge(null)}>
-              Trocar login
-            </button>
-          </form>
-        )}
+        <form className="login-form" onSubmit={startLogin}>
+          <label className="field">
+            <span>Login</span>
+            <input value={email} onChange={event => setEmail(event.target.value)} type="email" autoComplete="username" required />
+          </label>
+          <label className="field">
+            <span>Senha</span>
+            <input value={password} onChange={event => setPassword(event.target.value)} type="password" autoComplete="current-password" required />
+          </label>
+          <div className="recaptcha-box" ref={captchaNode} />
+          <button type="submit" disabled={!recaptchaConfig?.enabled || !captchaReady}>
+            <LogIn size={18} /> Entrar
+          </button>
+        </form>
 
         {error && <p className="error">{error}</p>}
       </section>
@@ -214,10 +207,40 @@ function LoginScreen({ onAuthenticated }: { onAuthenticated: (session: LoginSess
 
 function readError(failure: unknown) {
   if (failure instanceof Error) {
-    return failure.message || "Operação recusada."
+    try {
+      const parsed = JSON.parse(failure.message) as { detail?: string; title?: string }
+      return parsed.detail ?? parsed.title ?? "Operação recusada."
+    } catch {
+      return failure.message || "Operação recusada."
+    }
   }
 
   return "Operação recusada."
+}
+
+function loadRecaptchaScript() {
+  if (window.grecaptcha) {
+    return Promise.resolve()
+  }
+
+  recaptchaScriptPromise ??= new Promise<void>((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>(`script[src="${recaptchaScriptUrl}"]`)
+    if (existing) {
+      existing.addEventListener("load", () => resolve(), { once: true })
+      existing.addEventListener("error", () => reject(new Error("recaptcha.load_failed")), { once: true })
+      return
+    }
+
+    const script = document.createElement("script")
+    script.src = recaptchaScriptUrl
+    script.async = true
+    script.defer = true
+    script.addEventListener("load", () => resolve(), { once: true })
+    script.addEventListener("error", () => reject(new Error("recaptcha.load_failed")), { once: true })
+    document.head.appendChild(script)
+  })
+
+  return recaptchaScriptPromise
 }
 
 function Shell({ session, onLogout }: { session: LoginSession; onLogout: () => void }) {

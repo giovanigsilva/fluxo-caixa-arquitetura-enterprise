@@ -118,9 +118,16 @@ Esse passo também gera a credencial local do BFF em arquivos ignorados pelo Git
 .secrets/uat/bff.env
 ```
 
-Use o login indicado em `.secrets/uat/login.txt` na tela inicial. Depois da
-senha, escaneie o QR Code em um aplicativo compatível com Google Authenticator
-e informe o código TOTP de 6 dígitos.
+Para habilitar o Google reCAPTCHA v2 real, salve as chaves emitidas no console
+do Google antes de rodar o bootstrap:
+
+```text
+.secrets/uat/recaptcha_site_key
+.secrets/uat/recaptcha_secret_key
+```
+
+Use o login indicado em `.secrets/uat/login.txt` na tela inicial. A entrada
+exige senha e validação pelo checkbox Google reCAPTCHA.
 
 Compile backend, publique os serviços .NET em `.runtime/publish` e gere o build
 do frontend:
@@ -377,12 +384,16 @@ Secrets gerados pelo bootstrap:
 .secrets/{env}/bootstrap_admin_password
 .secrets/{env}/bff.env
 .secrets/{env}/login.txt
+.secrets/{env}/recaptcha_site_key
+.secrets/{env}/recaptcha_secret_key
 ```
 
 O arquivo `bff.env` expõe ao container somente o login, usuário seed e hash
-SHA-256 da senha. O valor de uso em texto claro fica apenas em `login.txt`; o
-`bootstrap_admin_password` é material local de derivação. Ambos são ignorados
-pelo Git.
+SHA-256 da senha. Quando os arquivos `recaptcha_site_key` e
+`recaptcha_secret_key` existem, o bootstrap também injeta as variáveis
+`VERTX_RECAPTCHA_SITE_KEY` e `VERTX_RECAPTCHA_SECRET_KEY` no BFF. O valor de uso
+da senha em texto claro fica apenas em `login.txt`; o `bootstrap_admin_password`
+é material local de derivação. Esses arquivos são ignorados pelo Git.
 
 Não coloque tokens, senhas, certificados privados ou arquivos `.env` reais no
 Git. O repositório foi estruturado para operar com secrets locais ignorados.
