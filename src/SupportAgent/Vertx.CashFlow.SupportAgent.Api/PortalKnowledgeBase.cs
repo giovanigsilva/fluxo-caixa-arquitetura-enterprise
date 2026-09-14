@@ -33,7 +33,7 @@ internal sealed partial class PortalRagIndex
             return new RagSearchResult([], [], 0);
         }
 
-        var wantsOverview = queryTokens.Any(token => token is "ajuda" or "mapa" or "portal" or "tela" or "tudo" or "onde" or "posicao" or "localizacao");
+        var wantsOverview = queryTokens.Any(token => token is "ajuda" or "mapa" or "portal" or "tela" or "tudo" or "onde" or "posicao" or "posicoes" or "localizacao" or "layout" or "visual" or "objeto" or "objetos" or "painel" or "paineis");
         var scored = documents
             .Select(document => new
             {
@@ -142,7 +142,29 @@ O agente pode conversar de forma natural em cumprimentos, agradecimentos, desped
             "Mapa geral do portal",
             ["overview", "ajuda", "mapa", "portal", "localizacao", "posicao"],
             """
-O portal autenticado possui uma coluna lateral esquerda, um topo operacional e o conteúdo principal. A ordem visual do conteúdo principal é: topo com Centro de comando financeiro, cards do Dashboard, grade de gráficos, painel Novo lançamento à esquerda, painel Teste de carga à direita, tabela Lançamentos, seção Clientes, seção Monitoramento e seção Alertas. O Agente Vertx fica fixo no canto inferior direito. Swagger fica fora do menu lateral, em /swagger.
+O portal autenticado possui três áreas fixas de referência: menu lateral escuro à esquerda, topo operacional acima do conteúdo principal e corpo principal à direita do menu. A ordem visual do corpo principal é: título Centro de comando financeiro, cards executivos, grade de gráficos, bloco de trabalho com Novo lançamento à esquerda e Teste de carga à direita, tabela Lançamentos, seção Clientes, seção Monitoramento do sistema e seção Controle de alertas. O Agente Vertx fica fixo no canto inferior direito. Swagger fica fora do menu lateral, em /swagger.
+"""),
+        new(
+            "portal.visual_layout_snapshot",
+            "Mapa visual detalhado da tela autenticada",
+            ["overview", "layout", "visual", "imagem", "objetos", "tela", "mapa", "localizacao", "posicao", "posicoes"],
+            """
+Na tela autenticada em desktop, o usuário deve se orientar assim:
+1. Menu lateral: ocupa toda a coluna esquerda, com fundo escuro. No topo do menu ficam o ícone e o texto Fluxo de Caixa, e abaixo aparece o ambiente Produção ou UAT. A navegação vem logo abaixo, nesta ordem de cima para baixo: Dashboard, Monitoramento, Alertas, Teste de carga, Lançamentos, Clientes e Manual.
+2. Topo operacional: fica no alto da área principal, à direita do menu lateral. À esquerda do topo aparecem o breadcrumb Produção / Organização Alfa e o título Centro de comando financeiro. À direita aparecem, em linha, os badges Banco req/s, Alertas, Administrador Financeiro Alfa e o botão Sair.
+3. Primeira linha do conteúdo: logo abaixo do título ficam seis cards horizontais, da esquerda para a direita: Créditos, Débitos, Saldo projetado, Banco total req/s, p95 API e Alertas ativos.
+4. Grade principal de gráficos: abaixo dos cards há dois gráficos grandes lado a lado. À esquerda fica Fluxo diário, com créditos e débitos por data. À direita fica Banco req/s, com leitura, escrita e total.
+5. Segunda linha de gráficos: abaixo da primeira grade, novamente lado a lado. À esquerda fica Latência, com p50, p95 e p99. À direita fica Filas e projeção, com Outbox, Rabbit, Projetados e Duplicados.
+6. Área operacional abaixo dos gráficos: abaixo da seção Latência e Filas e projeção fica o bloco com dois painéis. À esquerda, estreito, fica Novo lançamento. À direita, largo, fica Teste de carga.
+7. Novo lançamento: dentro do painel esquerdo da área operacional, a ordem dos campos é Crédito/Débito, Conta, Valor, Data, Descrição, Cliente e botão Registrar lançamento.
+8. Teste de carga: dentro do painel direito da área operacional, os botões de cenário ficam no topo em duas linhas. Abaixo deles ficam os cards Leitura banco, Escrita banco, Total banco e Erros 5xx.
+9. Lançamentos: abaixo da área operacional fica uma tabela larga chamada Lançamentos, com colunas Data, Descrição, Tipo e Valor.
+10. Clientes: abaixo da tabela Lançamentos fica a seção Clientes.
+11. Monitoramento do sistema: mais abaixo, após Clientes, fica a seção Monitoramento do sistema. Primeiro aparecem os cards RPS leitura, RPS escrita, Outbox pendente e Error budget. Abaixo desses cards vem a grade de saúde com Entries API, Read DB, RabbitMQ, Redis, Observability e AI boundary.
+12. Controle de alertas: no fim da página fica a seção Controle de alertas. Ela mostra regras com checkbox em duas colunas, status ok/ativo/silenciado e, abaixo, o feed de evento ativo ou Sem alerta ativo.
+13. Agente: o botão flutuante Posso te ajudar? fica sempre no canto inferior direito, sobreposto ao conteúdo. Ao clicar nele aparecem as opções Conversar por chat, Conversar local e Conversar por ligação acima do botão.
+
+Ao responder onde fica algo, cite primeiro o caminho pelo menu lateral quando existir e depois a posição física na página. Não confunda a ordem do menu lateral com a ordem das seções no corpo da página: no menu, Monitoramento e Alertas aparecem antes de Teste de carga; no corpo visual, Monitoramento e Controle de alertas aparecem depois de Lançamentos e Clientes, mais abaixo na rolagem.
 """),
         new(
             "login.access",
@@ -156,28 +178,28 @@ A tela de login aparece antes do portal autenticado e fica centralizada. A ordem
             "Menu lateral",
             ["menu", "lateral", "sidebar", "navegacao"],
             """
-O menu lateral fica na coluna esquerda depois do login. No topo aparecem a marca Fluxo de Caixa e o ambiente. Abaixo ficam os atalhos nesta ordem: Dashboard, Monitoramento, Alertas, Teste de carga, Lançamentos, Clientes e Manual. No rodapé do menu há o status Sistema ready, com req/s atual e o cenário selecionado.
+O menu lateral fica fixo na coluna esquerda depois do login, com fundo escuro. No topo aparecem a marca Fluxo de Caixa e o ambiente Produção ou UAT. Abaixo ficam os atalhos nesta ordem vertical: Dashboard, Monitoramento, Alertas, Teste de carga, Lançamentos, Clientes e Manual. Esses atalhos levam para seções da mesma página ou abrem o manual. No rodapé do menu há o status Sistema ready, com req/s atual e o cenário selecionado.
 """),
         new(
             "layout.topbar",
             "Topo operacional",
             ["topo", "cabecalho", "usuario", "sair", "badges"],
             """
-O topo operacional fica acima do conteúdo principal, à direita do menu lateral. À esquerda mostra o breadcrumb de ambiente e organização e o título Centro de comando financeiro. À direita ficam os badges Banco req/s, Alertas, usuário logado e o botão Sair.
+O topo operacional fica acima do conteúdo principal, à direita do menu lateral. À esquerda mostra o breadcrumb de ambiente e organização e o título Centro de comando financeiro. À direita ficam os badges, nesta ordem: Banco req/s, Alertas, usuário logado Administrador Financeiro Alfa e o botão Sair.
 """),
         new(
             "dashboard.metrics",
             "Dashboard e cards executivos",
             ["dashboard", "metricas", "saldo", "credito", "debito"],
             """
-Dashboard é a primeira seção abaixo do topo e também o primeiro item do menu lateral. Ele tem seis cards: Créditos, Débitos, Saldo projetado, Banco total req/s, p95 API e Alertas ativos. Serve para enxergar rapidamente posição financeira, carga do banco, latência e quantidade de alertas.
+Dashboard é a primeira seção abaixo do topo e também o primeiro item do menu lateral. Logo abaixo do título Centro de comando financeiro ficam seis cards em linha, da esquerda para a direita: Créditos, Débitos, Saldo projetado, Banco total req/s, p95 API e Alertas ativos. Serve para enxergar rapidamente posição financeira, carga do banco, latência e quantidade de alertas.
 """),
         new(
             "dashboard.charts",
             "Gráficos do dashboard",
             ["graficos", "grafico", "fluxo", "latencia", "filas", "projecao"],
             """
-Os gráficos ficam logo abaixo dos cards do Dashboard. A grade mostra Fluxo diário, Banco req/s, Latência e Filas e projeção. Fluxo diário compara créditos e débitos por data. Banco req/s mostra leitura, escrita e total. Latência mostra p50, p95 e p99. Filas e projeção mostra outbox, Rabbit, projetados e duplicados.
+Os gráficos ficam logo abaixo dos cards do Dashboard. A primeira linha da grade mostra Fluxo diário à esquerda e Banco req/s à direita. A segunda linha mostra Latência à esquerda e Filas e projeção à direita. Fluxo diário compara créditos e débitos por data. Banco req/s mostra leitura, escrita e total. Latência mostra p50, p95 e p99. Filas e projeção mostra outbox, Rabbit, projetados e duplicados.
 """),
         new(
             "agent.mcp_runtime",
@@ -191,14 +213,14 @@ Quando a pergunta pedir números atuais da tela, o SupportAgent.Api consulta um 
             "Novo lançamento",
             ["lancamento", "lancamentos", "registrar", "credito", "debito", "valor", "data"],
             """
-Novo lançamento fica abaixo dos gráficos, no painel da esquerda. Primeiro o usuário escolhe Crédito ou Débito. Depois preenche Conta, Valor, Data, Descrição e Cliente. O botão Registrar lançamento grava a movimentação. O agente apenas orienta o uso da tela; ele não cria lançamento automaticamente.
+Novo lançamento fica abaixo dos gráficos Latência e Filas e projeção, no painel estreito da esquerda da área operacional. Primeiro o usuário escolhe Crédito ou Débito. Depois preenche Conta, Valor, Data, Descrição e Cliente. O botão Registrar lançamento fica na parte inferior do painel e grava a movimentação. O agente apenas orienta o uso da tela; ele não cria lançamento automaticamente.
 """),
         new(
             "entries.list",
             "Tabela de lançamentos",
             ["tabela", "lancamentos", "historico", "valor"],
             """
-A seção Lançamentos fica abaixo do bloco de Novo lançamento e do Teste de carga. Ela lista o histórico confirmado em tabela com Data, Descrição, Tipo e Valor. Tipo aparece como Crédito ou Débito.
+A seção Lançamentos fica abaixo do bloco de Novo lançamento e do Teste de carga. Ela ocupa a largura principal da página e lista o histórico confirmado em tabela com colunas Data, Descrição, Tipo e Valor. Tipo aparece como Crédito ou Débito.
 """),
         new(
             "customers.seed",
@@ -212,21 +234,21 @@ Clientes fica no menu lateral e também como seção abaixo da tabela de Lançam
             "Monitoramento",
             ["monitoramento", "monitor", "sistema", "banco", "outbox", "health", "rabbit", "redis", "error budget"],
             """
-Monitoramento fica no menu lateral e a seção aparece depois de Clientes quando a página é rolada. Ele mostra RPS leitura, RPS escrita, Outbox pendente e Error budget. Logo abaixo há uma grade de saúde com Entries API, Read DB, RabbitMQ, Redis, Observability e AI boundary.
+Monitoramento fica como segundo item do menu lateral, mas a seção Monitoramento do sistema aparece mais abaixo no corpo da página, depois de Clientes. Primeiro ela mostra quatro cards em linha: RPS leitura, RPS escrita, Outbox pendente e Error budget. Logo abaixo há uma grade de saúde com Entries API, Read DB, RabbitMQ, Redis, Observability e AI boundary.
 """),
         new(
             "observability.alerts",
             "Controle de alertas",
             ["alertas", "alerta", "regras", "incidente", "silenciado"],
             """
-Alertas fica no menu lateral e a seção aparece no fim do portal. O título Controle de alertas mostra badge Normal ou Incidente simulado. A lista de regras possui checkbox para habilitar ou silenciar cada alerta, métrica atual, limite e status. Abaixo fica o feed de eventos ativos.
+Alertas fica como terceiro item do menu lateral, mas a seção Controle de alertas aparece no fim do corpo da página, abaixo de Monitoramento do sistema. O título Controle de alertas mostra badge Normal ou Incidente simulado. A lista de regras possui checkbox para habilitar ou silenciar cada alerta, métrica atual, limite e status em duas colunas. Abaixo fica o feed de eventos ativos ou a mensagem Sem alerta ativo.
 """),
         new(
             "observability.loadtest",
             "Teste de carga",
             ["teste", "carga", "k6", "rps", "cenario", "spike", "recovery"],
             """
-Teste de carga fica abaixo dos gráficos, no painel da direita, e também tem atalho no menu lateral. Ele tem botões de cenário como Normal, Carga 50, Carga 100, Pico 200 e Recuperação. Abaixo dos botões aparecem Leitura banco, Escrita banco, Total banco e Erros 5xx. O benchmark k6 real de 50 RPS por 10 minutos está documentado em docs/testing.
+Teste de carga fica abaixo dos gráficos Latência e Filas e projeção, no painel largo à direita da área operacional. Também tem atalho no menu lateral. No topo do painel ficam os botões de cenário em duas linhas: Normal, Carga 50, Carga 100, Pico 200 e Recuperação. Abaixo dos botões aparecem os cards Leitura banco, Escrita banco, Total banco e Erros 5xx. O benchmark k6 real de 50 RPS por 10 minutos está documentado em docs/testing.
 """),
         new(
             "docs.manual",
