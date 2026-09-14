@@ -44,7 +44,7 @@ internal sealed record AgentConfiguration(
             Environment.GetEnvironmentVariable("VERTX_AGENT_TELEPHONY_START_PATH") ?? "jobs/start",
             Environment.GetEnvironmentVariable("VERTX_AGENT_TELEPHONY_HEALTH_PATH") ?? "health",
             Environment.GetEnvironmentVariable("VERTX_AGENT_TELEPHONY_PROVIDER") ?? "vero",
-            Environment.GetEnvironmentVariable("VERTX_AGENT_TELEPHONY_CALLER_ID") ?? "3239379604",
+            Environment.GetEnvironmentVariable("VERTX_AGENT_TELEPHONY_CALLER_ID") ?? "3239379600",
             ParseInt("VERTX_AGENT_TELEPHONY_TIMEOUT_SECONDS", 8),
             Environment.GetEnvironmentVariable("VERTX_AGENT_ENTRIES_BASE_URL") ?? "http://127.0.0.1:6222",
             Environment.GetEnvironmentVariable("VERTX_AGENT_CONSOLIDATION_BASE_URL") ?? "http://127.0.0.1:6223",
@@ -364,7 +364,7 @@ internal sealed class PortalTelephonyClient(HttpClient httpClient, AgentConfigur
             ["portal_tenant_id"] = tenantId,
             ["portal_user_id"] = userId,
             ["portal_scenario_id"] = scenarioId,
-            ["support_profile"] = "vero-line-9604-tools-matcha-rag-mcp"
+            ["support_profile"] = "vero-line-9600-tools-matcha-rag-mcp"
         };
 
         var json = JsonSerializer.Serialize(payload, JsonOptions);

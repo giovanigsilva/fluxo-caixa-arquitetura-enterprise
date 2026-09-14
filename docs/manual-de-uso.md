@@ -113,7 +113,7 @@ carga, manual, Swagger, seguranca, cordialidades simples, MCP readonly e o
 proprio agente. Se a pergunta nao tiver evidencia nesses documentos, o agente
 recusa. Ele tambem bloqueia prompt injection, pedidos de secrets/tokens,
 arquivos sensiveis, comandos destrutivos e operacoes financeiras automaticas.
-Na ligacao, o agente usa o perfil de fala da linha 04: Matcha TTS
+Na ligacao, o agente usa origem final `3239379600`, Matcha TTS
 `freds-cml-stress-1000`, normalizacao de pontuacao, filtro de backchannel e
 limite de 120 segundos, em um bridge separado dos fluxos de cobranca, SDR e
 pesquisa.
