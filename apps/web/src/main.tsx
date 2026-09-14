@@ -92,6 +92,30 @@ const defaultAlertRules: AlertRule[] = [
 const initialAgentMessages: AgentMessage[] = [
   { id: "agent-welcome", role: "agent", text: "Olá, eu sou o agente Vertx. Estou conectado ao subagente com LLM local em GPU, RAG governado e MCP readonly para consultar os dados atuais do portal." }
 ]
+const portalFocusTimers = new Map<string, number>()
+const portalFocusTargets: Array<{ id: string; citationIds: string[]; terms: string[] }> = [
+  { id: "new-entry-panel", citationIds: ["entries.form"], terms: ["novo lancamento", "novo lançamento", "registrar lancamento", "registrar lançamento", "lancamento de debito", "lançamento de débito", "lancamento de credito", "lançamento de crédito", "campo valor", "campo data", "campo descricao", "campo descrição", "campo cliente"] },
+  { id: "loadtest", citationIds: ["observability.loadtest"], terms: ["teste de carga", "cenarios sinteticos", "cenários sintéticos", "carga 50", "carga 100", "pico 200", "recuperacao", "recuperação"] },
+  { id: "chart-queues", citationIds: [], terms: ["filas e projecao", "filas e projeção", "filas", "projecao", "projeção", "outbox", "rabbit", "projetados", "duplicados"] },
+  { id: "chart-latency", citationIds: [], terms: ["latencia", "latência", "p50", "p95", "p99"] },
+  { id: "chart-db-rps", citationIds: [], terms: ["banco req/s", "req/s do banco", "banco rps", "grafico banco", "gráfico banco"] },
+  { id: "chart-daily-flow", citationIds: [], terms: ["fluxo diario", "fluxo diário", "grafico fluxo", "gráfico fluxo"] },
+  { id: "metric-credits", citationIds: [], terms: ["card creditos", "card créditos", "creditos", "créditos"] },
+  { id: "metric-debits", citationIds: [], terms: ["card debitos", "card débitos", "debitos", "débitos"] },
+  { id: "metric-projected-balance", citationIds: [], terms: ["saldo projetado", "card saldo"] },
+  { id: "metric-db-rps", citationIds: [], terms: ["banco total req/s", "total req/s"] },
+  { id: "metric-p95-api", citationIds: [], terms: ["p95 api", "latencia api", "latência api"] },
+  { id: "metric-active-alerts", citationIds: [], terms: ["alertas ativos", "card alertas"] },
+  { id: "dashboard", citationIds: ["dashboard.metrics"], terms: ["dashboard", "cards executivos", "visao executiva", "visão executiva"] },
+  { id: "entries", citationIds: ["entries.list"], terms: ["tabela lancamentos", "tabela lançamentos", "historico de lancamentos", "histórico de lançamentos", "lista de lancamentos", "lista de lançamentos"] },
+  { id: "customers", citationIds: ["customers.seed"], terms: ["clientes", "cadastro uat"] },
+  { id: "monitor", citationIds: ["observability.monitoring"], terms: ["monitoramento do sistema", "monitoramento", "rps leitura", "rps escrita", "outbox pendente", "error budget", "entries api", "read db", "rabbitmq", "redis", "observability", "ai boundary", "saude dos componentes", "saúde dos componentes"] },
+  { id: "alerts", citationIds: ["observability.alerts"], terms: ["controle de alertas", "alertas", "alerta", "regras de alerta", "silenciar alerta", "incidente simulado", "sem alerta ativo"] },
+  { id: "portal-sidebar", citationIds: ["layout.sidebar"], terms: ["menu lateral", "sidebar", "navegacao", "navegação"] },
+  { id: "portal-topbar", citationIds: ["layout.topbar"], terms: ["topo operacional", "cabecalho", "cabeçalho", "botao sair", "botão sair", "usuario logado", "usuário logado"] },
+  { id: "support-agent-launcher", citationIds: ["agent.modes"], terms: ["agente", "posso te ajudar", "conversar por chat", "conversar local", "conversar por ligacao", "conversar por ligação"] },
+  { id: "manual-nav-link", citationIds: ["docs.manual"], terms: ["manual", "manual de uso", "instrucoes completas", "instruções completas"] }
+]
 
 function request<T>(path: string, init?: RequestInit): Promise<T> {
   return fetch(path, {
@@ -336,7 +360,7 @@ function Shell({ session, onLogout }: { session: LoginSession; onLogout: () => v
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
+      <aside className="sidebar" id="portal-sidebar">
         <div className="brand">
           <CircleDollarSign size={24} />
           <div>
@@ -351,7 +375,7 @@ function Shell({ session, onLogout }: { session: LoginSession; onLogout: () => v
           <a href="#loadtest"><Zap size={18} /><span>Teste de carga</span><small>Cenários sintéticos</small></a>
           <a href="#entries"><Banknote size={18} /><span>Lançamentos</span><small>Débito e crédito</small></a>
           <a href="#customers"><Building2 size={18} /><span>Clientes</span><small>Cadastro UAT</small></a>
-          <a href="/manual.html" target="_blank" rel="noreferrer"><FileText size={18} /><span>Manual</span><small>Instruções completas</small></a>
+          <a href="/manual.html" id="manual-nav-link" target="_blank" rel="noreferrer"><FileText size={18} /><span>Manual</span><small>Instruções completas</small></a>
         </nav>
         <div className="sidebar-status">
           <span><CheckCircle2 size={16} /> Sistema ready</span>
@@ -360,7 +384,7 @@ function Shell({ session, onLogout }: { session: LoginSession; onLogout: () => v
         </div>
       </aside>
       <main>
-        <header className="topbar">
+        <header className="topbar" id="portal-topbar">
           <div>
             <span className="crumb">{environmentName} / Organização Alfa</span>
             <h1>Centro de comando financeiro</h1>
@@ -374,16 +398,16 @@ function Shell({ session, onLogout }: { session: LoginSession; onLogout: () => v
         </header>
 
         <section id="dashboard" className="metrics dashboard-metrics">
-          <Metric title="Créditos" value={brl.format(credits)} icon={<Banknote />} />
-          <Metric title="Débitos" value={brl.format(debits)} icon={<RefreshCw />} />
-          <Metric title="Saldo projetado" value={brl.format(credits - debits)} icon={<Activity />} />
-          <Metric title="Banco total req/s" value={formatRps(dbRps)} icon={<Database />} tone={dbRps > 120 ? "warning" : "normal"} />
-          <Metric title="p95 API" value={`${metrics?.p95Ms ?? 0} ms`} icon={<LineChartIcon />} tone={(metrics?.p95Ms ?? 0) > 220 ? "warning" : "normal"} />
-          <Metric title="Alertas ativos" value={String(activeAlerts.length)} icon={<Bell />} tone={activeAlerts.length ? "critical" : "normal"} />
+          <Metric id="metric-credits" title="Créditos" value={brl.format(credits)} icon={<Banknote />} />
+          <Metric id="metric-debits" title="Débitos" value={brl.format(debits)} icon={<RefreshCw />} />
+          <Metric id="metric-projected-balance" title="Saldo projetado" value={brl.format(credits - debits)} icon={<Activity />} />
+          <Metric id="metric-db-rps" title="Banco total req/s" value={formatRps(dbRps)} icon={<Database />} tone={dbRps > 120 ? "warning" : "normal"} />
+          <Metric id="metric-p95-api" title="p95 API" value={`${metrics?.p95Ms ?? 0} ms`} icon={<LineChartIcon />} tone={(metrics?.p95Ms ?? 0) > 220 ? "warning" : "normal"} />
+          <Metric id="metric-active-alerts" title="Alertas ativos" value={String(activeAlerts.length)} icon={<Bell />} tone={activeAlerts.length ? "critical" : "normal"} />
         </section>
 
         <section className="analytics-grid">
-          <ChartPanel title="Fluxo diário" badge="BRL">
+          <ChartPanel id="chart-daily-flow" title="Fluxo diário" badge="BRL">
             <ResponsiveContainer width="100%" height={260}>
               <AreaChart data={daily.data?.rows ?? []}>
                 <CartesianGrid strokeDasharray="3 3" />
@@ -397,7 +421,7 @@ function Shell({ session, onLogout }: { session: LoginSession; onLogout: () => v
             </ResponsiveContainer>
           </ChartPanel>
 
-          <ChartPanel title="Banco req/s" badge={selectedScenarioLabel(selectedScenario)}>
+          <ChartPanel id="chart-db-rps" title="Banco req/s" badge={selectedScenarioLabel(selectedScenario)}>
             <ResponsiveContainer width="100%" height={260}>
               <LineChart data={buildRequestSeries(sample.data)}>
                 <CartesianGrid strokeDasharray="3 3" />
@@ -412,7 +436,7 @@ function Shell({ session, onLogout }: { session: LoginSession; onLogout: () => v
             </ResponsiveContainer>
           </ChartPanel>
 
-          <ChartPanel title="Latência" badge="p50 / p95 / p99">
+          <ChartPanel id="chart-latency" title="Latência" badge="p50 / p95 / p99">
             <ResponsiveContainer width="100%" height={240}>
               <LineChart data={buildLatencySeries(sample.data)}>
                 <CartesianGrid strokeDasharray="3 3" />
@@ -427,7 +451,7 @@ function Shell({ session, onLogout }: { session: LoginSession; onLogout: () => v
             </ResponsiveContainer>
           </ChartPanel>
 
-          <ChartPanel title="Filas e projeção" badge="Outbox">
+          <ChartPanel id="chart-queues" title="Filas e projeção" badge="Outbox">
             <ResponsiveContainer width="100%" height={240}>
               <BarChart data={buildQueueSeries(sample.data)}>
                 <CartesianGrid strokeDasharray="3 3" />
@@ -615,6 +639,7 @@ function FloatingAgent({ session, scenarioId }: { session: LoginSession; scenari
         text: answer.reply,
         citations: answer.citations
       }])
+      focusPortalTargetFromAgentAnswer(text, answer.reply, answer.citations, answer.refusalReason)
     } catch (failure) {
       setAgentError(readError(failure))
       setMessages(current => [...current, {
@@ -771,6 +796,7 @@ function FloatingAgent({ session, scenarioId }: { session: LoginSession; scenari
         return
       }
 
+      focusPortalTargetFromAgentAnswer(turn.transcript, turn.reply, turn.citations, turn.refusalReason)
       speakVoiceReply(turn.reply, true)
     } catch (failure) {
       voiceSendInFlightRef.current = false
@@ -967,7 +993,7 @@ function FloatingAgent({ session, scenarioId }: { session: LoginSession; scenari
         </div>
       )}
 
-      <button className="agent-launcher" aria-label="Abrir agente Vertx" onClick={() => mode ? closeAgent() : setMenuOpen(open => !open)} type="button">
+      <button className="agent-launcher" id="support-agent-launcher" aria-label="Abrir agente Vertx" onClick={() => mode ? closeAgent() : setMenuOpen(open => !open)} type="button">
         <Bot size={28} />
         <span>Posso te ajudar?</span>
       </button>
@@ -1176,6 +1202,90 @@ function renderAgentCitations(citations?: AgentCitation[]) {
   return <small className="agent-citations">Base consultada: {citations.map(citation => citation.title || citation.id).join(", ")}</small>
 }
 
+function focusPortalTargetFromAgentAnswer(query: string, reply: string, citations?: AgentCitation[], refusalReason?: string | null) {
+  if (refusalReason) {
+    return
+  }
+
+  const targetId = resolvePortalFocusTarget(query, reply, citations)
+  if (!targetId) {
+    return
+  }
+
+  window.requestAnimationFrame(() => highlightPortalTarget(targetId))
+}
+
+function resolvePortalFocusTarget(query: string, reply: string, citations?: AgentCitation[]) {
+  const targetFromQuery = resolvePortalFocusTargetByTerms(query)
+  if (targetFromQuery) {
+    return targetFromQuery
+  }
+
+  const citationIds = citations?.map(citation => citation.id) ?? []
+  const targetFromCitation = portalFocusTargets.find(target => target.citationIds.some(citationId => citationIds.includes(citationId)))
+  if (targetFromCitation) {
+    return targetFromCitation.id
+  }
+
+  return resolvePortalFocusTargetByTerms(reply)
+}
+
+function resolvePortalFocusTargetByTerms(text: string) {
+  const normalizedText = normalizePortalFocusText(text)
+  if (!normalizedText) {
+    return null
+  }
+
+  const ranked = portalFocusTargets
+    .map(target => ({
+      id: target.id,
+      match: bestPortalFocusMatch(normalizedText, target.terms)
+    }))
+    .filter(target => target.match !== null)
+    .sort((left, right) => left.match!.index - right.match!.index || right.match!.length - left.match!.length)
+
+  return ranked[0]?.id ?? null
+}
+
+function bestPortalFocusMatch(normalizedText: string, terms: string[]) {
+  return terms
+    .map(term => {
+      const normalizedTerm = normalizePortalFocusText(term)
+      return { index: normalizedText.indexOf(normalizedTerm), length: normalizedTerm.length }
+    })
+    .filter(match => match.index >= 0)
+    .sort((left, right) => left.index - right.index || right.length - left.length)[0] ?? null
+}
+
+function highlightPortalTarget(targetId: string) {
+  const target = document.getElementById(targetId)
+  if (!target) {
+    return
+  }
+
+  target.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" })
+  target.classList.remove("portal-focus-flash")
+  void target.getBoundingClientRect()
+  target.classList.add("portal-focus-flash")
+
+  const activeTimer = portalFocusTimers.get(targetId)
+  if (activeTimer) {
+    window.clearTimeout(activeTimer)
+  }
+
+  portalFocusTimers.set(targetId, window.setTimeout(() => {
+    target.classList.remove("portal-focus-flash")
+    portalFocusTimers.delete(targetId)
+  }, 2800))
+}
+
+function normalizePortalFocusText(text: string) {
+  return text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+}
+
 function renderInlineAgentText(text: string) {
   const parts: React.ReactNode[] = []
   const boldPattern = /\*\*([^*]+)\*\*/g
@@ -1199,13 +1309,13 @@ function renderInlineAgentText(text: string) {
   return parts.length ? parts : text
 }
 
-function Metric({ title, value, icon, tone = "normal" }: { title: string; value: string; icon: React.ReactNode; tone?: "normal" | "warning" | "critical" }) {
-  return <div className={`metric ${tone}`}><span>{icon}</span><small>{title}</small><strong>{value}</strong></div>
+function Metric({ id, title, value, icon, tone = "normal" }: { id?: string; title: string; value: string; icon: React.ReactNode; tone?: "normal" | "warning" | "critical" }) {
+  return <div className={`metric ${tone}`} id={id}><span>{icon}</span><small>{title}</small><strong>{value}</strong></div>
 }
 
-function ChartPanel({ title, badge, children }: { title: string; badge: string; children: React.ReactNode }) {
+function ChartPanel({ id, title, badge, children }: { id?: string; title: string; badge: string; children: React.ReactNode }) {
   return (
-    <div className="panel chart-panel">
+    <div className="panel chart-panel" id={id}>
       <div className="panel-title">{title}<span className="badge muted">{badge}</span></div>
       {children}
     </div>
@@ -1322,7 +1432,7 @@ function EntryPanel({ accounts, customers }: { accounts: Account[]; customers: C
   }
 
   return (
-    <div className="panel">
+    <div className="panel" id="new-entry-panel">
       <div className="panel-title">Novo lançamento</div>
       <form className="entry-form" onSubmit={submitEntry}>
         <div className="segmented" role="radiogroup" aria-label="Tipo de lançamento">
