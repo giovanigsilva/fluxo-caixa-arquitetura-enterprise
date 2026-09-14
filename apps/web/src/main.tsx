@@ -36,6 +36,7 @@ type AlertRule = { id: string; label: string; metric: AlertMetricKey; threshold:
 type AlertEvaluation = AlertRule & { active: boolean; value: number; displayValue: string }
 type AgentMode = "chat" | "local" | "call"
 type AgentMessage = { id: string; role: "agent" | "user"; text: string }
+type PortalGuideTopic = { keywords: string[]; answer: string }
 
 declare global {
   interface Window {
@@ -80,7 +81,89 @@ const defaultAlertRules: AlertRule[] = [
   { id: "budget", label: "Error budget", metric: "errorBudgetRemaining", threshold: 0.5, unit: "", compare: "below", enabled: true, severity: "critical" }
 ]
 const initialAgentMessages: AgentMessage[] = [
-  { id: "agent-welcome", role: "agent", text: "Olá, eu sou o agente Vertx. Posso ajudar com lançamentos, dashboard, alertas, Swagger e teste de carga." }
+  { id: "agent-welcome", role: "agent", text: "Olá, eu sou o agente Vertx. Posso localizar itens do portal, explicar onde ficam e orientar lançamentos, dashboard, alertas, Swagger e teste de carga." }
+]
+const portalMapAnswer = [
+  "Mapa rápido do portal:",
+  "1. Login: primeira tela, no centro. Tem Login, Senha, reCAPTCHA, Entrar e link Manual de uso.",
+  "2. Menu lateral: coluna esquerda após login. A ordem é Dashboard, Monitoramento, Alertas, Teste de carga, Lançamentos, Clientes e Manual.",
+  "3. Topo do portal: acima do conteúdo. Mostra ambiente/organização, Banco req/s, quantidade de alertas, usuário logado e botão Sair.",
+  "4. Dashboard: primeira faixa abaixo do topo. Mostra Créditos, Débitos, Saldo projetado, Banco total req/s, p95 API e Alertas ativos.",
+  "5. Gráficos: logo abaixo do Dashboard. Mostram Fluxo diário, Banco req/s, Latência e Filas/projeção.",
+  "6. Novo lançamento: abaixo dos gráficos, à esquerda. Serve para criar crédito ou débito com conta, valor, data, descrição e cliente.",
+  "7. Teste de carga: abaixo dos gráficos, à direita. Serve para trocar cenários sintéticos e acompanhar leitura/escrita do banco.",
+  "8. Lançamentos: abaixo do bloco de novo lançamento. Lista data, descrição, tipo e valor.",
+  "9. Clientes: abaixo de Lançamentos. Lista clientes seed da UAT.",
+  "10. Monitoramento: acessível pelo menu lateral. Mostra RPS, outbox, error budget e saúde de APIs/banco/fila/cache.",
+  "11. Alertas: acessível pelo menu lateral. Permite ligar/desligar regras e ver eventos ativos.",
+  "12. Agente: canto inferior esquerdo. Abre chat, conversa local visual e ligação visual.",
+  "Swagger: não fica no menu lateral; abra /swagger. O JSON técnico fica em /openapi/v1.json."
+].join("\n")
+const portalGuideTopics: PortalGuideTopic[] = [
+  {
+    keywords: ["login", "senha", "entrar", "recaptcha", "captcha", "acesso"],
+    answer: "Login fica na primeira tela, antes do portal autenticado, centralizado na página. De cima para baixo: marca Fluxo de Caixa, título Acesso operacional, campo Login, campo Senha, caixa do Google reCAPTCHA, botão Entrar e link Manual de uso. Ele valida senha + reCAPTCHA no BFF antes de abrir a sessão."
+  },
+  {
+    keywords: ["menu", "lateral", "navegacao", "navegação", "sidebar"],
+    answer: "O menu lateral fica na coluna esquerda depois do login. No topo aparece a marca Fluxo de Caixa e o ambiente. Abaixo ficam os atalhos, nesta ordem: Dashboard, Monitoramento, Alertas, Teste de carga, Lançamentos, Clientes e Manual. No rodapé da coluna fica o status Sistema ready com o req/s atual e o cenário selecionado."
+  },
+  {
+    keywords: ["topo", "topbar", "cabecalho", "cabeçalho", "usuario", "usuário", "sair", "logout"],
+    answer: "O topo fica acima do conteúdo principal, à direita do menu lateral. À esquerda ele mostra o breadcrumb do ambiente e o título Centro de comando financeiro. À direita ficam os badges Banco req/s, Alertas, usuário logado e o botão Sair."
+  },
+  {
+    keywords: ["dashboard", "visao executiva", "visão executiva", "metricas", "métricas", "cards"],
+    answer: "Dashboard é a primeira seção abaixo do topo e também o primeiro item do menu lateral. Ele tem seis cards: Créditos, Débitos, Saldo projetado, Banco total req/s, p95 API e Alertas ativos. Serve para enxergar rapidamente posição financeira e saúde operacional."
+  },
+  {
+    keywords: ["grafico", "gráfico", "graficos", "gráficos", "fluxo diario", "fluxo diário", "latencia", "latência", "fila", "filas", "projecao", "projeção"],
+    answer: "Os gráficos ficam logo abaixo dos cards do Dashboard. Na grade aparecem: Fluxo diário, comparando créditos e débitos por data; Banco req/s, com leitura, escrita e total; Latência, com p50/p95/p99; e Filas e projeção, com outbox, Rabbit, projetados e duplicados."
+  },
+  {
+    keywords: ["novo lancamento", "novo lançamento", "lancamento", "lançamento", "lancamentos", "lançamentos", "debito", "débito", "credito", "crédito", "registrar", "valor", "data", "descricao", "descrição"],
+    answer: "Novo lançamento fica abaixo dos gráficos, no painel da esquerda. Primeiro escolha Crédito ou Débito. Depois preencha Conta, Valor, Data, Descrição e Cliente. O botão Registrar lançamento grava a movimentação. A lista Lançamentos fica mais abaixo e mostra o histórico em tabela com Data, Descrição, Tipo e Valor."
+  },
+  {
+    keywords: ["saldo", "consolidado", "read model", "saldo projetado", "financeiro"],
+    answer: "O saldo aparece no card Saldo projetado, na primeira faixa do Dashboard. O consolidado diário alimenta o gráfico Fluxo diário logo abaixo. A Entries API grava o lançamento e o worker projeta os saldos por data de negócio no read model."
+  },
+  {
+    keywords: ["teste de carga", "carga", "k6", "rps", "cenario", "cenário", "spike", "normal", "recovery"],
+    answer: "Teste de carga fica abaixo dos gráficos, no painel da direita, e também tem atalho no menu lateral. Ele mostra botões de cenário como Normal, Carga 50, Carga 100, Pico 200 e Recuperação. Abaixo dos botões ficam Leitura banco, Escrita banco, Total banco e Erros 5xx. O k6 real de 50 RPS está documentado em docs/testing."
+  },
+  {
+    keywords: ["monitor", "monitoramento", "sistema", "banco", "outbox", "error budget", "health", "saude", "saúde", "rabbit", "redis", "api boundary", "ai boundary"],
+    answer: "Monitoramento fica no menu lateral e a seção aparece depois de Clientes quando a página é rolada. Ele mostra RPS leitura, RPS escrita, Outbox pendente e Error budget. Logo abaixo há a grade de saúde: Entries API, Read DB, RabbitMQ, Redis, Observability e AI boundary."
+  },
+  {
+    keywords: ["alerta", "alertas", "regra", "regras", "incidente", "silenciado", "ativo"],
+    answer: "Alertas fica no menu lateral e a seção aparece no fim do portal. No topo há o título Controle de alertas com badge Normal ou Incidente simulado. O bloco principal lista regras com checkbox para habilitar/silenciar, métrica atual, limite e status. Abaixo fica o feed de eventos ativos."
+  },
+  {
+    keywords: ["cliente", "clientes", "cadastro"],
+    answer: "Clientes fica no menu lateral e também como seção abaixo da tabela de Lançamentos. Ele lista os clientes seed disponíveis na UAT em cards simples, mostrando nome e versão. No formulário Novo lançamento, o campo Cliente usa essa mesma base para vincular uma movimentação."
+  },
+  {
+    keywords: ["manual", "documentacao", "documentação", "instrucoes", "instruções"],
+    answer: "Manual aparece em dois lugares: na tela de login, abaixo do botão Entrar, e no último item do menu lateral depois do login. Ele abre /manual.html em nova aba com instruções de uso, segurança, rotas, operação e troubleshooting."
+  },
+  {
+    keywords: ["swagger", "openapi", "rota", "rotas", "endpoint", "api", "json"],
+    answer: "Swagger não fica no menu lateral. Abra /swagger no mesmo domínio para ver as rotas documentadas. O contrato OpenAPI bruto fica em /openapi/v1.json. As principais áreas são login/recaptcha, entries, consolidated, observability e health checks."
+  },
+  {
+    keywords: ["agente", "robo", "robô", "chat", "conversar", "conversa local", "ligacao", "ligação", "telefone", "ligar"],
+    answer: "O Agente Vertx fica fixo no canto inferior esquerdo da tela autenticada. Ao clicar no ícone, as opções aparecem acima dele: Conversar por chat, Conversar local e Conversar por ligação. O chat responde dentro do portal. Conversa local e ligação estão preparados visualmente; a integração real vem depois."
+  },
+  {
+    keywords: ["producao", "produção", "uat", "endereco", "endereço", "url", "dominio", "domínio"],
+    answer: "Produção pública: https://vertx.dwilon.com/. UAT reservada: https://uat.vertx.dwilon.com/. Dentro do portal, o ambiente aparece no topo esquerdo e também na marca do menu lateral."
+  },
+  {
+    keywords: ["seguranca", "segurança", "enterprise", "protecao", "proteção"],
+    answer: "A segurança visível no portal começa no login com senha e Google reCAPTCHA v2 validado no BFF. No topo autenticado aparece o usuário da sessão. Na arquitetura, há headers de tenant/usuário, containers com usuário não root, filesystem read-only, cap_drop ALL, no-new-privileges e health checks documentados."
+  }
 ]
 
 function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -630,32 +713,25 @@ function agentModeLabel(mode: AgentMode) {
 }
 
 function buildAgentReply(text: string) {
-  const normalized = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
-  if (normalized.includes("lanc") || normalized.includes("debito") || normalized.includes("credito")) {
-    return "Para registrar, use o painel Novo lançamento: escolha crédito ou débito, conta, valor, data e descrição. Depois o dashboard e o consolidado são atualizados."
+  const normalized = normalizeAgentText(text)
+  const matchedTopic = portalGuideTopics.find(topic => topic.keywords.some(keyword => normalized.includes(normalizeAgentText(keyword))))
+  if (matchedTopic) {
+    return matchedTopic.answer
   }
 
-  if (normalized.includes("saldo") || normalized.includes("consolid")) {
-    return "O consolidado diário vem do read model. A Entries API grava o lançamento e o worker projeta os saldos por data de negócio."
+  if (asksForPortalMap(normalized)) {
+    return portalMapAnswer
   }
 
-  if (normalized.includes("alert") || normalized.includes("monitor") || normalized.includes("carga") || normalized.includes("k6")) {
-    return "O dashboard mostra telemetria sintética para operação visual. O requisito real de 50 RPS foi validado com k6 e está documentado em docs/testing."
-  }
+  return "Posso te orientar pelo mapa do portal. Pergunte, por exemplo: onde fica Novo lançamento, Dashboard, Monitoramento, Alertas, Teste de carga, Clientes, Manual, Swagger ou Agente."
+}
 
-  if (normalized.includes("swagger") || normalized.includes("rota") || normalized.includes("api")) {
-    return "As rotas documentadas estão no Swagger em /swagger. O OpenAPI JSON fica em /openapi/v1.json."
-  }
+function normalizeAgentText(text: string) {
+  return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+}
 
-  if (normalized.includes("senha") || normalized.includes("login") || normalized.includes("acesso")) {
-    return "O acesso usa login, senha e Google reCAPTCHA v2 validado pelo BFF antes de liberar a sessão."
-  }
-
-  if (normalized.includes("telefone") || normalized.includes("ligacao") || normalized.includes("ligar")) {
-    return "A experiência de ligação já tem o campo visual de telefone. A etapa de discagem real será conectada depois, quando definirmos o provedor e o fluxo seguro."
-  }
-
-  return "Posso te orientar pelo fluxo de caixa, lançamentos, consolidado, dashboard, alertas, Swagger ou teste de carga."
+function asksForPortalMap(normalized: string) {
+  return ["ajuda", "mapa", "portal", "tela", "onde", "localizacao", "posicao", "tudo"].some(term => normalized.includes(term))
 }
 
 function Metric({ title, value, icon, tone = "normal" }: { title: string; value: string; icon: React.ReactNode; tone?: "normal" | "warning" | "critical" }) {

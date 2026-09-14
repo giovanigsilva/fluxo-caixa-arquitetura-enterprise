@@ -59,7 +59,8 @@ inclui:
 - SPA React/Vite em português do Brasil consumindo o BFF.
 - Tela inicial pública com login, senha e Google reCAPTCHA v2 validado no BFF.
 - Agente Vertx flutuante com menu de chat, conversa local visual e ligação
-  preparada visualmente.
+  preparada visualmente; o chat conhece a localização e a função das áreas do
+  portal.
 - Swagger/OpenAPI 100% documentado para todas as rotas expostas pelo BFF.
 - Benchmark k6 do consolidado diário validado a 50 RPS por 10 minutos, com
   0.00% de falhas.
