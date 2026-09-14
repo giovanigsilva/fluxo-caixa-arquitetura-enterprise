@@ -38,6 +38,9 @@ principal para avaliacao pelo repositorio. Ele consolida os links publicos,
 credenciais de teste, roteiro de avaliacao, comandos locais e aponta para o
 manual completo em [`docs/manual-de-uso.md`](docs/manual-de-uso.md).
 
+A aderencia ao PDF do desafio esta rastreada em
+[`docs/requirements-traceability.md`](docs/requirements-traceability.md).
+
 ## Estado atual
 
 O projeto está pronto para demonstração técnica e UAT local/publicado. A entrega
@@ -725,6 +728,7 @@ Refazer tudo do zero sem apagar volumes manualmente:
 ## Documentação adicional
 
 - `MANUAL-DO-EXAMINADOR.md`
+- `docs/requirements-traceability.md`
 - `docs/architecture/definition.md`
 - `docs/manual-de-uso.md`
 - `docs/architecture/baseline-delta.md`

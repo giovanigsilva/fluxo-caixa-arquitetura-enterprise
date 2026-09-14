@@ -13,7 +13,9 @@ e tambem foi publicado no portal em `https://vertx.dwilon.com/manual.html`.
    arquitetura geral.
 3. Leia [`docs/manual-de-uso.md`](docs/manual-de-uso.md) para o manual de
    instrucao completo de cada item da aplicacao.
-4. Abra o Swagger para ver contratos, schemas, exemplos e status codes:
+4. Leia [`docs/requirements-traceability.md`](docs/requirements-traceability.md)
+   para cruzar requisito do PDF, status e evidencia.
+5. Abra o Swagger para ver contratos, schemas, exemplos e status codes:
    `https://vertx.dwilon.com/swagger`.
 
 ## Enderecos De Avaliacao
@@ -137,6 +139,12 @@ O detalhe funcional de cada item esta documentado em
 - troubleshooting;
 - limites conhecidos.
 
+## Aderencia Ao Desafio
+
+A matriz [`docs/requirements-traceability.md`](docs/requirements-traceability.md)
+cruza cada requisito do PDF com o que esta implementado, documentado, validado ou
+pendente. Ela deve ser usada como checklist tecnico do examinador.
+
 ## Seguranca Implementada
 
 Controles ativos nesta entrega:
@@ -186,4 +194,3 @@ financeiras automaticas a uma IA em tempo de execucao.
   Defense; hoje esta ativo o reCAPTCHA v2 checkbox.
 - `uat.vertx.dwilon.com` pode exigir certificado Cloudflare avancado ou
   customizado por ser subdominio profundo.
-
