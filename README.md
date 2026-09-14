@@ -285,7 +285,8 @@ O controle de resposta é feito antes do LLM:
   identidade do agente, sempre redirecionando para apoio no Vertx;
 - recusa quando não existe evidência suficiente no RAG;
 - prompt final contendo somente o contexto autorizado;
-- resposta formatada em português, com fontes internas do RAG.
+- resposta formatada em português; a API retorna fontes internas separadas para
+  auditoria e a interface exibe nomes amigáveis quando relevante.
 
 O mesmo subagente já aceita o canal lógico `telephony-support`, reservado para a
 telefonia de apoio. Nesta etapa ele ainda não aciona ASR, TTS, microfone,

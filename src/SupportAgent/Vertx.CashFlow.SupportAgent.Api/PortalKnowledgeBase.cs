@@ -247,7 +247,7 @@ O Agente Vertx fica fixo no canto inferior direito da tela autenticada. Ao clica
             "RAG e política do agente",
             ["rag", "politica", "policy", "controle", "permitido", "bloqueado", "llm"],
             """
-O SupportAgent.Api usa LLM local em GPU, mas não responde livremente. Antes do LLM, a pergunta passa por política de bloqueio contra prompt injection, segredos, tokens, arquivos sensíveis e comandos destrutivos. Depois passa por recuperação RAG sobre documentos curados do portal. Se não houver evidência suficiente, o agente recusa. O prompt enviado ao LLM contém apenas o contexto autorizado recuperado e exige resposta com fontes internas. O agente não executa ações financeiras nem realiza ligações.
+O SupportAgent.Api usa LLM local em GPU, mas não responde livremente. Antes do LLM, a pergunta passa por política de bloqueio contra prompt injection, segredos, tokens, arquivos sensíveis e comandos destrutivos. Depois passa por recuperação RAG sobre documentos curados do portal. Se não houver evidência suficiente, o agente recusa. O prompt enviado ao LLM contém apenas o contexto autorizado recuperado. A API retorna fontes internas em campo separado para auditoria e interface. O agente não executa ações financeiras nem realiza ligações.
 """),
         new(
             "security.enterprise",

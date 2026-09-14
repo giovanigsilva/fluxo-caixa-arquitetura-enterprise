@@ -88,8 +88,9 @@ Ao clicar nele, aparecem tres opcoes acima do simbolo:
 - `Conversar por chat`: abre um chat real no portal. O navegador envia a
   conversa para o BFF, que encaminha ao `SupportAgent API`. Esse subagente usa
   RAG governado e o LLM local em GPU `Qwen/Qwen3.5-35B-A3B-GPTQ-Int4`.
-  As respostas sao maiores, formatadas em blocos/listas e citam fontes internas
-  do RAG.
+  As respostas sao maiores e formatadas em blocos/listas. A API retorna fontes
+  internas separadas para auditoria, e a interface mostra nomes amigaveis quando
+  for relevante.
 - `Conversar local`: abre a tela visual do modo de voz local. A ativacao real de
   microfone sera detalhada em etapa posterior.
 - `Conversar por ligacao`: abre a tela visual com campo para numero de telefone.

@@ -112,7 +112,7 @@ Regras obrigatórias:
 - Não execute ações financeiras. Para lançamentos, apenas oriente onde registrar no portal.
 - Para ligação e conversa local, explique que a experiência visual existe e que a integração real será definida em etapa posterior.
 - Quando explicar localização, detalhe em que parte da tela fica, abaixo/acima de qual área aparece, o que faz e como o usuário chega ali.
-- Inclua ao final uma linha curta "Fontes: ..." usando somente os IDs das fontes recebidas no contexto RAG.
+- Não escreva linha "Fontes:" no texto da resposta; a API retorna as fontes em campo separado para auditoria e interface.
 """;
 
     public static AgentPrompt Build(string channel, AgentChatMessage[] messages, RagSearchResult retrieval)
@@ -250,19 +250,24 @@ internal static class AgentPolicy
 
     public static string SanitizeModelReply(string reply, RagSearchResult retrieval)
     {
-        var trimmed = reply.Trim();
+        var trimmed = StripSourceLines(reply);
         if (string.IsNullOrWhiteSpace(trimmed))
         {
             return "Não tenho contexto autorizado no RAG do Vertx para responder isso.";
         }
 
-        if (!trimmed.Contains("Fontes:", StringComparison.OrdinalIgnoreCase))
-        {
-            trimmed = $"{trimmed}\nFontes: {string.Join(", ", retrieval.Citations.Select(citation => citation.Id))}";
-        }
-
         const int maxLength = 7000;
-        return trimmed.Length <= maxLength ? trimmed : trimmed[..maxLength] + "\nFontes: " + string.Join(", ", retrieval.Citations.Select(citation => citation.Id));
+        return trimmed.Length <= maxLength ? trimmed : trimmed[..maxLength].TrimEnd();
+    }
+
+    private static string StripSourceLines(string reply)
+    {
+        var lines = reply
+            .Trim()
+            .Split('\n', StringSplitOptions.TrimEntries)
+            .Where(line => !line.StartsWith("Fonte:", StringComparison.OrdinalIgnoreCase) && !line.StartsWith("Fontes:", StringComparison.OrdinalIgnoreCase));
+
+        return string.Join('\n', lines).Trim();
     }
 
     private static bool IsAllowedRole(string? role)

@@ -604,8 +604,8 @@ function FloatingAgent({ session }: { session: LoginSession }) {
                 {messages.map(message => (
                   <div className={`agent-message ${message.role}`} key={message.id}>
                     <div className="agent-bubble">
-                      {message.role === "agent" ? renderAgentText(message.text) : <p>{message.text}</p>}
-                      {message.citations?.length ? <small className="agent-citations">Fontes: {message.citations.map(citation => citation.id).join(", ")}</small> : null}
+                      {message.role === "agent" ? renderAgentText(stripAgentSourceLine(message.text)) : <p>{message.text}</p>}
+                      {message.role === "agent" ? renderAgentCitations(message.citations) : null}
                     </div>
                   </div>
                 ))}
@@ -728,6 +728,24 @@ function renderAgentText(text: string) {
 
   flushLists()
   return blocks.length ? blocks : <p>{text}</p>
+}
+
+function stripAgentSourceLine(text: string) {
+  const cleaned = text
+    .split(/\r?\n/)
+    .filter(line => !/^\s*fontes?\s*:/i.test(line))
+    .join("\n")
+    .trim()
+
+  return cleaned || text
+}
+
+function renderAgentCitations(citations?: AgentCitation[]) {
+  if (!citations?.length || (citations.length === 1 && citations[0].id === "agent.social")) {
+    return null
+  }
+
+  return <small className="agent-citations">Base consultada: {citations.map(citation => citation.title || citation.id).join(", ")}</small>
 }
 
 function renderInlineAgentText(text: string) {
