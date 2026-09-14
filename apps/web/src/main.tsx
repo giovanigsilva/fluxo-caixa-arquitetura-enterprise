@@ -678,7 +678,7 @@ function FloatingAgent({ session, scenarioId }: { session: LoginSession; scenari
           scenarioId
         })
       })
-      setCallStatus(`${answer.message} Número: ${answer.phoneNumber}. Origem: ${answer.callerId}.`)
+      setCallStatus(`${answer.message} Número: ${answer.phoneNumber}.`)
       runPortalGuidedTargets(answer.guidedTargets)
     } catch (failure) {
       clearPortalCallGuide()
@@ -1027,7 +1027,7 @@ function FloatingAgent({ session, scenarioId }: { session: LoginSession; scenari
                 {callPending ? "Chamando..." : "Ligar com agente"}
               </button>
               {callError && <p className="agent-panel-error">{callError}</p>}
-              <small>O agente usa o bridge Vero dedicado com origem final 00 e destaca os itens do portal durante a orientação.</small>
+              <small>O agente usa o bridge Vero dedicado sem caller ID fixo e destaca os itens do portal durante a orientação.</small>
             </div>
           )}
         </section>

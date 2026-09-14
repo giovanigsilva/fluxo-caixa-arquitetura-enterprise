@@ -337,8 +337,8 @@ carga, Lançamentos, Monitoramento e Alertas durante a orientação.
 
 No host de telefonia, o bridge isolado fica documentado em
 `/data/projects/Saas de Cobrança/discador-perfeito-rust/docker-compose.portal-support.yml`.
-Ele usa Vero por IP/porta, `SIP_OUTBOUND_DIAL_FORMAT=vero`, origem final
-`3239379600`, porta SIP dedicada `5067/udp`, RTP `4020/4021` e conecta no agente
+Ele usa Vero por IP/porta, `SIP_OUTBOUND_DIAL_FORMAT=vero`, sem caller ID fixo,
+porta SIP dedicada `5067/udp`, RTP `4020/4021` e conecta no agente
 SIP `ddr-agent-vertx-portal-support`. O agente SIP fica dedicado ao portal e usa
 Matcha TTS `freds-cml-stress-1000`, normalização de pontuação, filtro de
 backchannel expandido, resposta calorosa e limite de 120 segundos. O fluxo é
@@ -359,7 +359,7 @@ Variáveis relevantes do SupportAgent para telefonia:
 - `VERTX_AGENT_TELEPHONY_START_PATH=jobs/start`
 - `VERTX_AGENT_TELEPHONY_HEALTH_PATH=health`
 - `VERTX_AGENT_TELEPHONY_PROVIDER=vero`
-- `VERTX_AGENT_TELEPHONY_CALLER_ID=3239379600`
+- `VERTX_AGENT_TELEPHONY_CALLER_ID=` vazio para não fixar caller ID
 - `VERTX_AGENT_TELEPHONY_TIMEOUT_SECONDS=8`
 
 Rotas documentadas no Swagger:
@@ -392,7 +392,7 @@ ela trouxe, quais custos permanecem e como evoluir para produção real.
 | Segurança alvo documentada mesmo quando não ativa na UAT | O PDF permite demonstrar premissas em decisões e representações arquiteturais, não só em codificação. | Mostra conhecimento de RLS, Vault, OIDC, TLS, DLQ, scans, observabilidade e resposta a falhas. | Exige honestidade: controles preparados não podem ser vendidos como ativos. | Promover os itens preparados por fase, sempre com teste, evidência e runbook. |
 | AI-first como processo, não como decisão financeira automática | O usuário pediu destacar a implementação AI-first, mas o domínio financeiro exige previsibilidade e auditoria. | Documentação, Swagger, scripts e matriz de aderência ficam legíveis para humanos e agentes de IA. | Não há IA executando lançamentos ou aprovando decisões financeiras na UAT. | Usar IA apenas como assistente auditável para suporte operacional, análise de logs e geração de relatórios, com fronteira explícita. |
 | MCP readonly para enriquecer o agente | O agente precisava responder sobre o que está na tela sem depender de números decorados no RAG. | Respostas ficam ancoradas nos serviços reais do portal: saldo, créditos, débitos, consolidado, latência, filas, projeções, req/s, saúde e alertas. | Continua sendo leitura operacional; se Entries/Consolidation/Observability estiverem indisponíveis, o agente não inventa números e informa indisponibilidade do snapshot. | Evoluir para MCP externo versionado, com autenticação própria, auditoria por ferramenta, cache curto, rate limit e permissões por tenant/role. |
-| Bridge Vero dedicado para suporte por ligação | A Vero funcional já atende outros fluxos e os workers existentes têm regras de cobrança, SDR ou pesquisa. | A ligação do portal disca de verdade, usa origem final `3239379600`, agente SIP próprio e perfil de fala dedicado sem contaminar campanhas. | Exige operar um container adicional e validar disponibilidade do tronco antes de testes reais. | Transformar o bridge em serviço versionado com fila, auditoria por chamada, WebSocket de eventos para destaque em tempo real e rate limit por usuário. |
+| Bridge Vero dedicado para suporte por ligação | A Vero funcional já atende outros fluxos e os workers existentes têm regras de cobrança, SDR ou pesquisa. | A ligação do portal disca de verdade, não fixa caller ID, usa agente SIP próprio e perfil de fala dedicado sem contaminar campanhas. | Exige operar um container adicional e validar disponibilidade do tronco antes de testes reais. | Transformar o bridge em serviço versionado com fila, auditoria por chamada, WebSocket de eventos para destaque em tempo real e rate limit por usuário. |
 
 Resumo da decisão principal: para a prova, a escolha foi entregar o fluxo crítico
 fim a fim funcionando e medido; para produção real, a evolução correta é trocar

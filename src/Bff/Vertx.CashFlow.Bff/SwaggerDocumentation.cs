@@ -338,7 +338,7 @@ internal static class SwaggerDocumentation
         "tags": ["Support agent"],
         "operationId": "startSupportAgentCall",
         "summary": "Solicita ligação com agente pela Vero",
-        "description": "Recebe um telefone brasileiro com DDD, normaliza o número, solicita a chamada no bridge Vero dedicado e retorna o roteiro visual usado pelo portal para rolar e destacar os itens durante a orientação telefônica. O bridge usa origem final 3239379600 na Vero, agente SIP dedicado, Matcha TTS freds-cml-stress-1000, normalização de pontuação e política de suporte restrita ao portal.",
+        "description": "Recebe um telefone brasileiro com DDD, normaliza o número, solicita a chamada no bridge Vero dedicado e retorna o roteiro visual usado pelo portal para rolar e destacar os itens durante a orientação telefônica. O bridge não fixa caller ID na Vero, usa agente SIP dedicado, Matcha TTS freds-cml-stress-1000, normalização de pontuação e política de suporte restrita ao portal.",
         "parameters": [
           { "$ref": "#/components/parameters/TenantIdHeader" },
           { "$ref": "#/components/parameters/UserIdHeader" }
@@ -1110,7 +1110,7 @@ internal static class SwaggerDocumentation
             "example": {
               "enabled": true,
               "provider": "vero",
-              "callerId": "3239379600",
+              "callerId": "",
               "status": "ready",
               "detail": "{\"status\":\"ready\"}"
             }
@@ -1127,7 +1127,7 @@ internal static class SwaggerDocumentation
               "callId": "portal-support-00000000000000000000000000000000",
               "phoneNumber": "(31) 99999-9999",
               "provider": "vero",
-              "callerId": "3239379600",
+              "callerId": "",
               "message": "Chamada solicitada pela Vero. O agente Vertx vai orientar pelo telefone e o portal vai destacar os pontos principais na tela.",
               "guidedTargets": [
                 { "targetId": "dashboard", "label": "Dashboard executivo", "delayMs": 800 },
@@ -1398,7 +1398,7 @@ internal static class SwaggerDocumentation
           "callId": { "type": "string", "description": "Identificador do job/chamada aceito pelo bridge.", "example": "portal-support-00000000000000000000000000000000" },
           "phoneNumber": { "type": "string", "description": "Telefone normalizado para exibição.", "example": "(31) 99999-9999" },
           "provider": { "type": "string", "example": "vero" },
-          "callerId": { "type": "string", "description": "DDR/origem configurada para a chamada de suporte.", "example": "3239379600" },
+          "callerId": { "type": "string", "description": "Caller ID configurado para a chamada de suporte; vazio quando o bridge não fixa origem.", "example": "" },
           "message": { "type": "string", "description": "Mensagem operacional exibida pelo portal." },
           "guidedTargets": {
             "type": "array",
@@ -1422,7 +1422,7 @@ internal static class SwaggerDocumentation
         "properties": {
           "enabled": { "type": "boolean", "example": true },
           "provider": { "type": "string", "example": "vero" },
-          "callerId": { "type": "string", "example": "3239379600" },
+          "callerId": { "type": "string", "example": "" },
           "status": { "type": "string", "enum": ["disabled", "misconfigured", "ready", "unavailable", "timeout"], "example": "ready" },
           "detail": { "type": "string", "nullable": true, "description": "Resposta curta do bridge ou motivo de indisponibilidade." }
         }
