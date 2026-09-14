@@ -19,6 +19,7 @@ exportação de extrato, simulação de observabilidade e SPA em pt-BR.
 - [Segurança enterprise implementada](#seguranca-enterprise-implementada)
 - [Monitoria, alertas e notificações](#monitoria-alertas-e-notificacoes)
 - [Arquitetura em execução](#arquitetura-em-execucao)
+- [Trade-offs arquiteturais](#trade-offs-arquiteturais)
 - [Pré-requisitos](#pre-requisitos)
 - [Subir a API em UAT](#subir-a-api-em-uat)
 - [Testar a API](#testar-a-api)
@@ -257,6 +258,34 @@ Browser/Cliente HTTP
 
 O frontend roda separado em `:6230`, mas consome a API por caminhos relativos
 (`/api/...`) quando publicado pelo mesmo domínio/tunnel.
+
+## Trade-offs arquiteturais
+
+Esta entrega prioriza uma fatia vertical executável, auditável e fácil de subir
+localmente, sem esconder o desenho alvo enterprise. Os trade-offs abaixo
+explicam o que foi implementado agora, por que a decisão foi tomada, quais ganhos
+ela trouxe, quais custos permanecem e como evoluir para produção real.
+
+| Decisão | Por que foi escolhida | Ganho | Custo/risco assumido | Evolução natural |
+| --- | --- | --- | --- | --- |
+| Separar BFF, Entries API, Consolidation API e workers em processos distintos | O desafio exige que o controle de lançamentos não dependa da disponibilidade do consolidado diário. | Falha no worker/API de consolidado não impede a Entries API de aceitar lançamentos; responsabilidades ficam isoladas. | Mais containers e mais pontos de configuração do que um monólito simples. | Orquestrar em Kubernetes/ECS/Nomad, com autoscaling separado por serviço e probes reais. |
+| Usar storage file-backed em `.runtime/{env}` na UAT | A prova precisa ser reproduzível rapidamente por qualquer avaliador, sem provisionar banco externo. | Bootstrap simples, sem dependência de infraestrutura paga ou credenciais sensíveis; smoke e k6 rodam localmente. | Não substitui PostgreSQL em produção: não há pooling, réplica, RLS, backup gerenciado ou concorrência multi-instância real. | Migrar para PostgreSQL com EF/Npgsql, migrations, transações, TLS, RLS e bancos/roles por ambiente. |
+| Persistir lançamento + outbox antes de responder | O consolidado deve ser assíncrono e recuperável, sem acoplar escrita financeira à projeção. | Reduz perda entre escrita e projeção; permite reprocessamento e reconstrução do read model. | Outbox local é suficiente para a UAT, mas não tem garantias de broker distribuído. | Usar RabbitMQ real com publisher confirms, mandatory routing, retry, DLQ, TLS e consumidores idempotentes. |
+| Read model diário separado da escrita | Consultas de consolidado não devem disputar o mesmo fluxo lógico dos comandos de lançamento. | Leitura fica otimizada para saldo diário e expõe defasagem por `outboxPending`. | Consistência é eventual; o saldo pode ficar alguns segundos atrás da escrita. | Adotar CQRS com banco de leitura dedicado, métricas de lag e alertas de atraso de projeção. |
+| BFF como fronteira pública | O navegador não deve conhecer os serviços internos nem suas portas. | Centraliza entrada pública, login, proxy, Swagger e health; reduz exposição dos containers internos. | O BFF vira ponto crítico de entrada e precisa de hardening adicional em produção. | Adicionar rate limit, WAF rules, CSRF, cookies seguros, session store, OIDC e policies por rota. |
+| Login local com senha + Google reCAPTCHA v2 | O usuário pediu tela inicial protegida e validação antirrobô pública; Keycloak real aumentaria tempo e dependências da prova. | Entrega proteção real na entrada web com validação server-side do token reCAPTCHA. | Não é MFA/OIDC enterprise completo; QR Code Fraud Defense depende de liberação externa da Google. | Trocar para Keycloak/OIDC Authorization Code + PKCE, MFA/passkey e reCAPTCHA Enterprise/Fraud Defense quando liberado. |
+| Observability Simulation API no dashboard | Era necessário mostrar monitoramento, alertas e carga sem derrubar ou sobrecarregar o ambiente público. | Demonstra a experiência operacional com RPS, latência, filas, error budget e cenários controlados. | Métricas do dashboard são sintéticas; não provam telemetria real de produção. | Ativar OpenTelemetry Collector, Prometheus, Grafana, Loki e Alertmanager com métricas reais dos serviços. |
+| Benchmark k6 em UAT local | O requisito do PDF pede 50 RPS no consolidado com até 5% de perda. | Evidência objetiva: 30.001 requisições em 10 min, 50.001571/s, 0.00% falhas, p95 807.38 us. | Mede a UAT file-backed local, não uma topologia produtiva com rede pública e banco gerenciado. | Repetir o teste em produção com PostgreSQL real, réplicas, TLS, observabilidade e janela estatística maior. |
+| Reports Worker assíncrono para CSV/XLSX/PDF | Relatórios podem ser mais pesados que comandos online. | Evita prender o request principal e prepara o fluxo para processamento em background. | Na UAT, os arquivos ficam em storage local; não há object storage nem retenção governada. | Usar R2/S3, antivírus, expiração, trilha de download e políticas de retenção por tenant. |
+| Docker Compose para UAT e production | O desafio valoriza execução local clara e documentação no repositório. | Qualquer avaliador consegue subir a solução com comandos simples e ver os containers separados. | Compose não entrega HA real, rolling deploy, autoscaling nem self-healing avançado. | Empacotar imagens versionadas, publicar em registry e operar em orquestrador com blue/green ou canary. |
+| Cloudflare Tunnel para publicação pública | Publicar sem expor portas externas do host diretamente. | Reduz superfície de rede, mantém BFF/frontend bound em `127.0.0.1` e entrega HTTPS público no domínio principal. | Configuração operacional fica fora do Git por conter IDs/secrets; subdomínio profundo UAT depende de certificado compatível. | Documentar IaC do edge com secrets externos, certificado avançado/customizado e ambientes separados. |
+| Segurança alvo documentada mesmo quando não ativa na UAT | O PDF permite demonstrar premissas em decisões e representações arquiteturais, não só em codificação. | Mostra conhecimento de RLS, Vault, OIDC, TLS, DLQ, scans, observabilidade e resposta a falhas. | Exige honestidade: controles preparados não podem ser vendidos como ativos. | Promover os itens preparados por fase, sempre com teste, evidência e runbook. |
+| AI-first como processo, não como decisão financeira automática | O usuário pediu destacar a implementação AI-first, mas o domínio financeiro exige previsibilidade e auditoria. | Documentação, Swagger, scripts e matriz de aderência ficam legíveis para humanos e agentes de IA. | Não há IA executando lançamentos ou aprovando decisões financeiras na UAT. | Usar IA apenas como assistente auditável para suporte operacional, análise de logs e geração de relatórios, com fronteira explícita. |
+
+Resumo da decisão principal: para a prova, a escolha foi entregar o fluxo crítico
+fim a fim funcionando e medido; para produção real, a evolução correta é trocar
+as dependências locais por serviços gerenciados/clusterizados sem mudar o
+contrato público da API.
 
 ## Pré-requisitos
 
