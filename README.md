@@ -280,7 +280,9 @@ O controle de resposta é feito antes do LLM:
   sensíveis e comandos destrutivos;
 - recuperação RAG em base curada do portal, com documentos sobre login, menu,
   topo, dashboard, gráficos, lançamentos, clientes, monitoramento, alertas,
-  teste de carga, manual, Swagger, agente e segurança;
+  teste de carga, manual, Swagger, agente, segurança e cordialidades simples;
+- conversa social controlada para cumprimentos, agradecimentos, despedidas e
+  identidade do agente, sempre redirecionando para apoio no Vertx;
 - recusa quando não existe evidência suficiente no RAG;
 - prompt final contendo somente o contexto autorizado;
 - resposta formatada em português, com fontes internas do RAG.

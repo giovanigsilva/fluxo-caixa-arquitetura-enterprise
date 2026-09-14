@@ -25,8 +25,10 @@ internal sealed partial class PortalRagIndex
 
     public RagSearchResult Search(string query, double minScore)
     {
+        var normalizedQuery = Normalize(query);
+        var wantsSmallTalk = IsAllowedSmallTalk(normalizedQuery);
         var queryTokens = Tokenize(query).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-        if (queryTokens.Length == 0)
+        if (queryTokens.Length == 0 && !wantsSmallTalk)
         {
             return new RagSearchResult([], [], 0);
         }
@@ -36,12 +38,12 @@ internal sealed partial class PortalRagIndex
             .Select(document => new
             {
                 document.Document,
-                Score = Score(document, queryTokens, wantsOverview)
+                Score = Score(document, queryTokens, wantsOverview, wantsSmallTalk)
             })
             .Where(item => item.Score >= minScore)
             .OrderByDescending(item => item.Score)
             .ThenBy(item => item.Document.Id, StringComparer.OrdinalIgnoreCase)
-            .Take(wantsOverview ? 8 : 5)
+            .Take(wantsOverview || wantsSmallTalk ? 8 : 5)
             .ToArray();
 
         var selected = scored.Select(item => item.Document).ToArray();
@@ -65,7 +67,7 @@ internal sealed partial class PortalRagIndex
             .Where(token => token.Length > 2 && !StopWords.Contains(token, StringComparer.OrdinalIgnoreCase));
     }
 
-    private static double Score(IndexedDocument document, string[] queryTokens, bool wantsOverview)
+    private static double Score(IndexedDocument document, string[] queryTokens, bool wantsOverview, bool wantsSmallTalk)
     {
         var score = 0.0;
         foreach (var token in queryTokens)
@@ -87,7 +89,35 @@ internal sealed partial class PortalRagIndex
             score += 8.0;
         }
 
+        if (wantsSmallTalk && document.Document.Tags.Contains("conversa-social", StringComparer.OrdinalIgnoreCase))
+        {
+            score += 10.0;
+        }
+
         return score;
+    }
+
+    private static bool IsAllowedSmallTalk(string normalizedQuery)
+    {
+        if (normalizedQuery is "oi" or "ola" or "bom dia" or "boa tarde" or "boa noite" or "tudo bem" or "valeu" or "obrigado" or "obrigada" or "tchau")
+        {
+            return true;
+        }
+
+        var phrases = new[]
+        {
+            "e ai",
+            "como vai",
+            "quem e voce",
+            "qual seu nome",
+            "voce pode ajudar",
+            "pode me ajudar",
+            "me ajuda",
+            "ate logo",
+            "ate mais"
+        };
+
+        return phrases.Any(phrase => normalizedQuery.Contains(phrase, StringComparison.OrdinalIgnoreCase));
     }
 
     [GeneratedRegex("[^a-z0-9]+")]
@@ -100,6 +130,13 @@ internal static class PortalKnowledge
 {
     public static readonly RagDocument[] Documents =
     [
+        new(
+            "agent.social",
+            "Conversa social permitida",
+            ["conversa-social", "cumprimento", "saudacao", "oi", "ola", "bom-dia", "boa-tarde", "boa-noite", "obrigado", "tchau", "identidade", "ajuda"],
+            """
+O agente pode conversar de forma natural em cumprimentos, agradecimentos, despedidas e perguntas simples de identidade ou disponibilidade, como oi, olá, bom dia, boa tarde, boa noite, tudo bem, obrigado, tchau, quem é você, qual seu nome e você pode ajudar. A resposta deve ser cordial, em português do Brasil, e direcionar a conversa para ajuda no portal Vertx. Se o usuário pedir assuntos pessoais, notícias, clima, programação, política, entretenimento ou qualquer tema fora do portal e fora dessa cordialidade simples, o agente deve recusar e explicar que só pode apoiar o uso do sistema Vertx.
+"""),
         new(
             "portal.overview",
             "Mapa geral do portal",

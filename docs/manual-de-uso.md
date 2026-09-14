@@ -97,10 +97,14 @@ Ao clicar nele, aparecem tres opcoes acima do simbolo:
 
 O RAG do agente contem documentos curados sobre login, menu lateral, topo,
 dashboard, graficos, lancamentos, clientes, monitoramento, alertas, teste de
-carga, manual, Swagger, seguranca e o proprio agente. Se a pergunta nao tiver
-evidencia nesses documentos, o agente recusa. Ele tambem bloqueia prompt
-injection, pedidos de secrets/tokens, arquivos sensiveis, comandos destrutivos e
-operacoes financeiras automaticas.
+carga, manual, Swagger, seguranca, cordialidades simples e o proprio agente. Se
+a pergunta nao tiver evidencia nesses documentos, o agente recusa. Ele tambem
+bloqueia prompt injection, pedidos de secrets/tokens, arquivos sensiveis,
+comandos destrutivos e operacoes financeiras automaticas.
+
+Cumprimentos como "oi", "ola", "bom dia", agradecimentos, despedidas e
+perguntas simples sobre quem e o agente sao permitidos para que a conversa fique
+natural. Assuntos fora do portal Vertx continuam bloqueados.
 
 O chat nao cria lancamentos automaticamente e nao chama APIs financeiras sozinho.
 Ele orienta o operador a usar a tela correta.

@@ -73,6 +73,8 @@ multi-tenant:
 - Agente Vertx flutuante no canto inferior direito, com chat real via
   SupportAgent API, RAG governado, LLM local em GPU e respostas longas
   formatadas, alem de opcoes visuais para conversa local e ligacao.
+- Conversa social controlada: o agente responde cumprimentos, agradecimentos,
+  despedidas e identidade basica, mas recusa temas fora do portal Vertx.
 - Swagger/OpenAPI documentado.
 - Scripts de bootstrap, build, teste, smoke, status e subida.
 - Docker Compose para UAT e production.
