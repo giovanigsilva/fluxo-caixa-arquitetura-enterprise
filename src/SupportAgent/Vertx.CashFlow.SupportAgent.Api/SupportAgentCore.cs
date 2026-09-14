@@ -368,7 +368,9 @@ internal sealed class PortalTelephonyClient(HttpClient httpClient, AgentConfigur
             ["support_profile"] = "vero-line-9604-tools-matcha-rag-mcp"
         };
 
-        using var response = await httpClient.PostAsJsonAsync(Relative(configuration.TelephonyStartPath), payload, JsonOptions, ct).ConfigureAwait(false);
+        var json = JsonSerializer.Serialize(payload, JsonOptions);
+        using var content = new StringContent(json, Encoding.UTF8, "application/json");
+        using var response = await httpClient.PostAsync(Relative(configuration.TelephonyStartPath), content, ct).ConfigureAwait(false);
         var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
