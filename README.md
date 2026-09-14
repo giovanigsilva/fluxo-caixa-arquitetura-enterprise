@@ -11,6 +11,12 @@ exportação de extrato, simulação de observabilidade e SPA em pt-BR.
 ## Sumário
 
 - [Estado atual](#estado-atual)
+- [Credenciais de avaliação](#credenciais-de-avaliacao)
+- [Endereços publicados](#enderecos-publicados)
+- [AI-first](#ai-first)
+- [Login, reCAPTCHA e QR Code](#login-recaptcha-e-qr-code)
+- [Segurança enterprise implementada](#seguranca-enterprise-implementada)
+- [Monitoria, alertas e notificações](#monitoria-alertas-e-notificacoes)
 - [Arquitetura em execução](#arquitetura-em-execucao)
 - [Pré-requisitos](#pre-requisitos)
 - [Subir a API em UAT](#subir-a-api-em-uat)
@@ -39,6 +45,8 @@ inclui:
 - Reports Worker gerando CSV, XLSX e PDF.
 - Observability Simulation API com cenários sintéticos claramente rotulados.
 - SPA React/Vite em português do Brasil consumindo o BFF.
+- Tela inicial pública com login, senha e Google reCAPTCHA v2 validado no BFF.
+- Swagger/OpenAPI 100% documentado para todas as rotas expostas pelo BFF.
 - Docker Compose para UAT e production.
 - Scripts para bootstrap, build, teste, subida, smoke, status e documentação.
 - Documento de arquitetura exportado em Markdown, HTML e PDF.
@@ -48,6 +56,171 @@ OpenTelemetry/Prometheus/Grafana/Loki estão preparados em arquivos de
 infraestrutura. A fatia validada neste momento usa persistência local em arquivo
 em `.runtime`, porque o objetivo desta etapa é permitir que qualquer pessoa suba
 e teste a API rapidamente.
+
+## Credenciais de avaliação
+
+Estas credenciais são de demonstração, foram autorizadas para exposição ao
+examinador e devem ser usadas somente neste ambiente técnico:
+
+```text
+Login: admin@admin.com
+Senha: Vtx-1d7d875ea260072afc7fa86d
+```
+
+O acesso pela tela inicial também exige a validação do Google reCAPTCHA no
+navegador. Chamadas diretas ao endpoint de login sem token reCAPTCHA válido são
+recusadas pelo BFF.
+
+## Endereços publicados
+
+Produção pública de avaliação:
+
+- Aplicação: <https://vertx.dwilon.com/>
+- Swagger UI: <https://vertx.dwilon.com/swagger>
+- OpenAPI JSON: <https://vertx.dwilon.com/openapi/v1.json>
+- Health ready: <https://vertx.dwilon.com/health/ready>
+
+UAT:
+
+- Frontend local: <http://127.0.0.1:6230>
+- BFF/API local: <http://127.0.0.1:6210>
+- Swagger UI local: <http://127.0.0.1:6210/swagger>
+- OpenAPI JSON local: <http://127.0.0.1:6210/openapi/v1.json>
+- Health ready local: <http://127.0.0.1:6210/health/ready>
+- Domínio UAT reservado: <https://uat.vertx.dwilon.com/>
+
+Nota operacional: o domínio `uat.vertx.dwilon.com` é um host profundo. Em zona
+Cloudflare full setup, esse formato normalmente exige certificado avançado ou
+customizado, porque o Universal SSL cobre o domínio raiz e subdomínios de
+primeiro nível, como `vertx.dwilon.com`.
+
+## AI-first
+
+Esta entrega foi feita em modelo AI-first: os requisitos foram transformados em
+contratos executáveis, documentação operacional, Swagger, scripts de build/teste
+e validações automatizadas junto com a implementação. O objetivo foi deixar a API
+legível tanto para pessoas quanto para agentes de IA, com rotas previsíveis,
+schemas completos, exemplos, erros documentados e comandos reproduzíveis.
+
+AI-first aqui não significa que uma IA decide lançamentos financeiros em tempo de
+execução. Significa que a arquitetura foi preparada para colaboração com IA,
+auditoria rápida, automação de operações e evolução assistida sem esconder
+comportamentos críticos fora do código ou da documentação.
+
+## Login, reCAPTCHA e QR Code
+
+Implementação ativa:
+
+- A primeira tela exige login e senha.
+- O frontend carrega o widget oficial Google reCAPTCHA v2 checkbox.
+- O BFF expõe `GET /bff/login/recaptcha/config` somente com a site key pública.
+- O BFF valida `recaptchaToken` no servidor pela API oficial do Google antes de
+  aceitar `POST /bff/login/start`.
+- Token ausente, inválido ou falso retorna erro e não cria sessão local.
+- A secret key do reCAPTCHA fica somente no servidor, em `.secrets/{env}`.
+
+Sobre o desafio por QR Code: o reCAPTCHA v2 checkbox pode exibir seleção de
+imagens, porque esse é um comportamento normal do produto clássico do Google.
+Para desafio com QR Code, a documentação oficial direciona para o Google Cloud
+reCAPTCHA Fraud Defense com challenge policy de QR Code, recurso que exige
+allowlist da Google.
+
+Solicitação já enviada à Google:
+
+- Produto solicitado: reCAPTCHA Fraud Defense com QR Code challenge.
+- Universal key informada: `6LfYQrstAAAAAPPY-Fg6wXWE6cPa5jH35GJNT8ke`.
+- Domínios solicitados: `vertx.dwilon.com` e `uat.vertx.dwilon.com`.
+- Destino: `fraud-defense@google.com`.
+- Evidência de envio: mailserver `dwilon.com`, DKIM ativo, status SMTP `250 OK`,
+  message-id `<20260914154541.2CC7F2041097@mail.dwilon.com>`.
+
+Quando a Google liberar a allowlist, o próximo passo é ativar o fluxo Enterprise:
+criar assessment server-side no Google Cloud, aplicar a policy de QR Code para a
+Universal key e trocar o provider do gate de entrada sem remover a validação de
+senha no BFF.
+
+Referências oficiais:
+
+- <https://developers.google.com/recaptcha/docs/versions>
+- <https://support.google.com/recaptcha/faq/6080947>
+- <https://docs.cloud.google.com/recaptcha/docs/select-challenge-types>
+- <https://docs.cloud.google.com/recaptcha/docs/challenge-policies>
+- <https://docs.cloud.google.com/recaptcha/docs/choose-key-type>
+
+## Segurança enterprise implementada
+
+Controles ativos nesta fatia executável:
+
+- Fronteira pública no BFF: o navegador fala com o BFF, não com os serviços
+  internos diretamente.
+- Login de entrada com senha e Google reCAPTCHA v2 verificado no servidor.
+- Senha armazenada no container como hash SHA-256, não como texto claro.
+- Secrets reais ficam fora do Git, em `.secrets/{env}`, e são injetados no
+  runtime por `env_file`.
+- Portas do BFF e frontend são expostas somente em `127.0.0.1`; a publicação
+  pública passa pelo Cloudflare Tunnel.
+- Containers .NET rodam sem root, com filesystem read-only, `tmpfs` limitado,
+  `no-new-privileges` e `cap_drop: ALL`.
+- Serviços internos ficam em rede Docker privada do grupo `teste-pratico`.
+- Headers de tenant e usuário separam o escopo lógico das chamadas de negócio
+  nesta fatia UAT.
+- Catálogo de permissões, usuários, roles e capabilities disponível na
+  Management API.
+- Idempotência obrigatória em criação de lançamentos com `Idempotency-Key`,
+  bloqueando replay com payload divergente.
+- Controle de concorrência com `If-Match` em alterações e exclusões de cadastros.
+- Auditoria de operações sensíveis disponível em `GET /api/entries/audit`.
+- Outbox pattern antes da projeção, reduzindo perda de eventos entre escrita e
+  consolidação.
+- Exportação de extrato gerada por job assíncrono, evitando acoplamento pesado
+  no request principal.
+- Documentação OpenAPI descreve parâmetros, headers, payloads, status codes,
+  exemplos e erros esperados.
+
+Controles preparados para evolução produtiva:
+
+- Keycloak/OIDC com PKCE, MFA/passkey e políticas por audience.
+- PostgreSQL com bancos separados, migrações, transações reais, TLS e RLS.
+- Vault para secrets gerenciados, leases e auditoria de acesso.
+- RabbitMQ com retry, DLQ, publisher confirms e TLS.
+- Rate limit, CSRF e cookies de sessão reais no BFF produtivo.
+- Scans SAST/containers, DAST e E2E antes de promover para uso financeiro real.
+
+## Monitoria, alertas e notificações
+
+Monitoria ativa:
+
+- `GET /health/live` para vida do processo.
+- `GET /health/ready` para readiness da entrada pública.
+- `scripts/status.sh --env uat` para visão dos containers do grupo.
+- Logs por container com `docker logs`.
+- Observability Simulation API com cenários rotulados em
+  `/api/observability/scenarios`.
+- Amostras de telemetria sintética em `/api/observability/samples`.
+- Stream SSE em `/api/observability/stream` para dashboards em tempo quase real.
+- Tela de monitoramento na SPA exibindo RPS, p95, Rabbit ready, outbox pendente e
+  orçamento de erro sintético.
+
+Stack preparada:
+
+- OpenTelemetry Collector.
+- Prometheus com scrape configurado para BFF, Entries, Consolidation, Management
+  e Observability API.
+- Grafana provisionado com datasource Prometheus e Loki.
+- Loki preparado para centralização de logs.
+
+Alertas e notificações documentados para operação enterprise:
+
+- Health não ready deve acionar incidente de disponibilidade.
+- Aumento de p95/p99 deve acionar alerta de latência.
+- Outbox pendente acima do limite operacional deve acionar alerta de fila.
+- Erros 4xx de login por reCAPTCHA devem alimentar painel antifraude.
+- Erros 5xx devem acionar alerta de confiabilidade.
+- Falha de geração/download de extrato deve acionar alerta funcional.
+- Notificação externa por e-mail já foi comprovada pelo mailserver Dwilon no
+  envio à Google; a automação contínua de alertas por e-mail/pager deve ser
+  conectada ao Prometheus/Alertmanager ou ferramenta equivalente no ambiente
+  final.
 
 ## Arquitetura em execução
 
@@ -126,8 +299,15 @@ do Google antes de rodar o bootstrap:
 .secrets/uat/recaptcha_secret_key
 ```
 
-Use o login indicado em `.secrets/uat/login.txt` na tela inicial. A entrada
-exige senha e validação pelo checkbox Google reCAPTCHA.
+Em uma instalação limpa, use o login indicado em `.secrets/uat/login.txt` na tela
+inicial. No ambiente público de avaliação desta entrega, use:
+
+```text
+Login: admin@admin.com
+Senha: Vtx-1d7d875ea260072afc7fa86d
+```
+
+A entrada exige senha e validação pelo checkbox Google reCAPTCHA.
 
 Compile backend, publique os serviços .NET em `.runtime/publish` e gere o build
 do frontend:
@@ -400,15 +580,16 @@ Git. O repositório foi estruturado para operar com secrets locais ignorados.
 
 ## Publicação Cloudflare
 
-Os domínios planejados são:
+Domínios da entrega:
 
-- `https://vertx.dwilon.com`
-- `https://uat.vertx.dwilon.com`
+- `https://vertx.dwilon.com`: endpoint público principal da avaliação.
+- `https://uat.vertx.dwilon.com`: domínio UAT reservado para rota dedicada.
 
 Links públicos de documentação:
 
 - Swagger UI: `https://vertx.dwilon.com/swagger`
 - OpenAPI JSON: `https://vertx.dwilon.com/openapi/v1.json`
+- Health ready: `https://vertx.dwilon.com/health/ready`
 
 As rotas Cloudflare/Tunnel são configuração operacional externa e não ficam neste
 repositório. Para publicar em um ambiente próprio, a recomendação é:
@@ -521,6 +702,10 @@ Refazer tudo do zero sem apagar volumes manualmente:
   padrão validado.
 - A Observability API retorna telemetria sintética rotulada.
 - O módulo de assistente/IA existe apenas como boundary desabilitada.
+- O QR Code do Google Fraud Defense depende de allowlist da Google e ativação do
+  fluxo reCAPTCHA Enterprise; hoje está ativo o Google reCAPTCHA v2 checkbox.
+- O domínio profundo `uat.vertx.dwilon.com` pode exigir certificado Cloudflare
+  avançado/customizado para HTTPS público válido.
 - O script de performance k6 existe, mas benchmark formal não foi executado
   nesta entrega.
 - A stack production tem Compose validado, mas deve receber secrets, DNS,
