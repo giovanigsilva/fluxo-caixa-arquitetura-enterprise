@@ -757,7 +757,7 @@ function FloatingAgent({ session }: { session: LoginSession }) {
                     </div>
                   </div>
                 ))}
-                {agentPending && <div className="agent-message agent"><div className="agent-bubble">Consultando subagente com RAG e LLM em GPU...</div></div>}
+                {agentPending && <div className="agent-message agent"><div className="agent-bubble">Respondendo...</div></div>}
               </div>
               {agentError && <p className="agent-panel-error">{agentError}</p>}
               <form className="agent-chat-form" onSubmit={sendMessage}>
