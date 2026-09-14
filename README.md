@@ -56,11 +56,12 @@ inclui:
 - Consolidation Worker projetando eventos publicados.
 - Reports Worker gerando CSV, XLSX e PDF.
 - Observability Simulation API com cenários sintéticos claramente rotulados.
+- SupportAgent API com RAG governado e LLM local em GPU.
 - SPA React/Vite em português do Brasil consumindo o BFF.
 - Tela inicial pública com login, senha e Google reCAPTCHA v2 validado no BFF.
-- Agente Vertx flutuante com menu de chat, conversa local visual e ligação
-  preparada visualmente; o chat conhece a localização e a função das áreas do
-  portal.
+- Agente Vertx flutuante no canto inferior direito, com chat real via
+  subagente, respostas longas formatadas, conversa local visual e ligação
+  preparada visualmente.
 - Swagger/OpenAPI 100% documentado para todas as rotas expostas pelo BFF.
 - Benchmark k6 do consolidado diário validado a 50 RPS por 10 minutos, com
   0.00% de falhas.
@@ -252,6 +253,9 @@ Browser/Cliente HTTP
     -> Management API
     -> Consolidation API
     -> Observability Simulation API
+    -> SupportAgent API
+      -> RAG governado
+      -> Qwen/Qwen3.5-35B-A3B-GPTQ-Int4 via vLLM em GPU
   -> Workers locais
     -> Outbox Relay
     -> Consolidation Worker
@@ -261,6 +265,29 @@ Browser/Cliente HTTP
 
 O frontend roda separado em `:6230`, mas consome a API por caminhos relativos
 (`/api/...`) quando publicado pelo mesmo domínio/tunnel.
+
+## Support Agent e RAG
+
+O Agente Vertx do portal usa um subagente real, exposto internamente como
+`SupportAgent API`. O navegador não decide respostas por palavras-chave: ele
+envia a conversa para `POST /api/agent/chat`, o BFF encaminha para o subagente e
+o subagente chama o LLM local em GPU (`Qwen/Qwen3.5-35B-A3B-GPTQ-Int4` via
+vLLM).
+
+O controle de resposta é feito antes do LLM:
+
+- política de bloqueio para prompt injection, secrets, tokens, arquivos
+  sensíveis e comandos destrutivos;
+- recuperação RAG em base curada do portal, com documentos sobre login, menu,
+  topo, dashboard, gráficos, lançamentos, clientes, monitoramento, alertas,
+  teste de carga, manual, Swagger, agente e segurança;
+- recusa quando não existe evidência suficiente no RAG;
+- prompt final contendo somente o contexto autorizado;
+- resposta formatada em português, com fontes internas do RAG.
+
+O mesmo subagente já aceita o canal lógico `telephony-support`, reservado para a
+telefonia de apoio. Nesta etapa ele ainda não aciona ASR, TTS, microfone,
+discagem real nem criação automática de lançamentos.
 
 ## Trade-offs arquiteturais
 
@@ -433,6 +460,10 @@ Health e documentação:
 - `GET /swagger/index.html`
 - `GET /openapi/v1.json`
 
+Support Agent:
+
+- `POST /api/agent/chat`
+
 Entries:
 
 - `GET /api/entries/customers`
@@ -561,6 +592,9 @@ UAT:
 - Grupo Docker: `teste-pratico`
 - Frontend local: `127.0.0.1:6230`
 - BFF local: `127.0.0.1:6210`
+- SupportAgent API: interno no Compose, sem porta pública direta
+- LLM local consumido pelo subagente: `qwen3-llm-realtime-test` via rede Docker
+  `census-realtime-agent-test_realtime`
 - Runtime: `.runtime/uat`
 - Secrets: `.secrets/uat`
 
@@ -570,6 +604,9 @@ Production:
 - Grupo Docker: `vertx-production`
 - Frontend local: `127.0.0.1:6330`
 - BFF local: `127.0.0.1:6310`
+- SupportAgent API: interno no Compose, sem porta pública direta
+- LLM local consumido pelo subagente: `qwen3-llm-realtime-test` via rede Docker
+  `census-realtime-agent-test_realtime`
 - Runtime: `.runtime/production`
 - Secrets: `.secrets/production`
 
@@ -749,7 +786,8 @@ Refazer tudo do zero sem apagar volumes manualmente:
 - RabbitMQ/Redis/Keycloak/Vault estão preparados, mas não integrados ao fluxo
   padrão validado.
 - A Observability API retorna telemetria sintética rotulada.
-- O módulo de assistente/IA existe apenas como boundary desabilitada.
+- O agente usa LLM local em GPU com RAG governado; conversa local por microfone,
+  TTS e discagem real ainda são etapas futuras.
 - O QR Code do Google Fraud Defense depende de allowlist da Google e ativação do
   fluxo reCAPTCHA Enterprise; hoje está ativo o Google reCAPTCHA v2 checkbox.
 - O domínio profundo `uat.vertx.dwilon.com` pode exigir certificado Cloudflare

@@ -35,8 +35,9 @@ type AlertMetricKey = "p95Ms" | "errors5xx" | "errors429" | "outboxPending" | "d
 type AlertRule = { id: string; label: string; metric: AlertMetricKey; threshold: number; unit: string; compare: "above" | "below"; enabled: boolean; severity: "warning" | "critical" }
 type AlertEvaluation = AlertRule & { active: boolean; value: number; displayValue: string }
 type AgentMode = "chat" | "local" | "call"
-type AgentMessage = { id: string; role: "agent" | "user"; text: string }
-type PortalGuideTopic = { keywords: string[]; answer: string }
+type AgentCitation = { id: string; title: string }
+type AgentMessage = { id: string; role: "agent" | "user"; text: string; citations?: AgentCitation[] }
+type AgentChatResponse = { reply: string; model: string; mode: string; citations: AgentCitation[]; refusalReason?: string | null }
 
 declare global {
   interface Window {
@@ -81,89 +82,7 @@ const defaultAlertRules: AlertRule[] = [
   { id: "budget", label: "Error budget", metric: "errorBudgetRemaining", threshold: 0.5, unit: "", compare: "below", enabled: true, severity: "critical" }
 ]
 const initialAgentMessages: AgentMessage[] = [
-  { id: "agent-welcome", role: "agent", text: "Olá, eu sou o agente Vertx. Posso localizar itens do portal, explicar onde ficam e orientar lançamentos, dashboard, alertas, Swagger e teste de carga." }
-]
-const portalMapAnswer = [
-  "Mapa rápido do portal:",
-  "1. Login: primeira tela, no centro. Tem Login, Senha, reCAPTCHA, Entrar e link Manual de uso.",
-  "2. Menu lateral: coluna esquerda após login. A ordem é Dashboard, Monitoramento, Alertas, Teste de carga, Lançamentos, Clientes e Manual.",
-  "3. Topo do portal: acima do conteúdo. Mostra ambiente/organização, Banco req/s, quantidade de alertas, usuário logado e botão Sair.",
-  "4. Dashboard: primeira faixa abaixo do topo. Mostra Créditos, Débitos, Saldo projetado, Banco total req/s, p95 API e Alertas ativos.",
-  "5. Gráficos: logo abaixo do Dashboard. Mostram Fluxo diário, Banco req/s, Latência e Filas/projeção.",
-  "6. Novo lançamento: abaixo dos gráficos, à esquerda. Serve para criar crédito ou débito com conta, valor, data, descrição e cliente.",
-  "7. Teste de carga: abaixo dos gráficos, à direita. Serve para trocar cenários sintéticos e acompanhar leitura/escrita do banco.",
-  "8. Lançamentos: abaixo do bloco de novo lançamento. Lista data, descrição, tipo e valor.",
-  "9. Clientes: abaixo de Lançamentos. Lista clientes seed da UAT.",
-  "10. Monitoramento: acessível pelo menu lateral. Mostra RPS, outbox, error budget e saúde de APIs/banco/fila/cache.",
-  "11. Alertas: acessível pelo menu lateral. Permite ligar/desligar regras e ver eventos ativos.",
-  "12. Agente: canto inferior esquerdo. Abre chat, conversa local visual e ligação visual.",
-  "Swagger: não fica no menu lateral; abra /swagger. O JSON técnico fica em /openapi/v1.json."
-].join("\n")
-const portalGuideTopics: PortalGuideTopic[] = [
-  {
-    keywords: ["login", "senha", "entrar", "recaptcha", "captcha", "acesso"],
-    answer: "Login fica na primeira tela, antes do portal autenticado, centralizado na página. De cima para baixo: marca Fluxo de Caixa, título Acesso operacional, campo Login, campo Senha, caixa do Google reCAPTCHA, botão Entrar e link Manual de uso. Ele valida senha + reCAPTCHA no BFF antes de abrir a sessão."
-  },
-  {
-    keywords: ["menu", "lateral", "navegacao", "navegação", "sidebar"],
-    answer: "O menu lateral fica na coluna esquerda depois do login. No topo aparece a marca Fluxo de Caixa e o ambiente. Abaixo ficam os atalhos, nesta ordem: Dashboard, Monitoramento, Alertas, Teste de carga, Lançamentos, Clientes e Manual. No rodapé da coluna fica o status Sistema ready com o req/s atual e o cenário selecionado."
-  },
-  {
-    keywords: ["topo", "topbar", "cabecalho", "cabeçalho", "usuario", "usuário", "sair", "logout"],
-    answer: "O topo fica acima do conteúdo principal, à direita do menu lateral. À esquerda ele mostra o breadcrumb do ambiente e o título Centro de comando financeiro. À direita ficam os badges Banco req/s, Alertas, usuário logado e o botão Sair."
-  },
-  {
-    keywords: ["dashboard", "visao executiva", "visão executiva", "metricas", "métricas", "cards"],
-    answer: "Dashboard é a primeira seção abaixo do topo e também o primeiro item do menu lateral. Ele tem seis cards: Créditos, Débitos, Saldo projetado, Banco total req/s, p95 API e Alertas ativos. Serve para enxergar rapidamente posição financeira e saúde operacional."
-  },
-  {
-    keywords: ["grafico", "gráfico", "graficos", "gráficos", "fluxo diario", "fluxo diário", "latencia", "latência", "fila", "filas", "projecao", "projeção"],
-    answer: "Os gráficos ficam logo abaixo dos cards do Dashboard. Na grade aparecem: Fluxo diário, comparando créditos e débitos por data; Banco req/s, com leitura, escrita e total; Latência, com p50/p95/p99; e Filas e projeção, com outbox, Rabbit, projetados e duplicados."
-  },
-  {
-    keywords: ["novo lancamento", "novo lançamento", "lancamento", "lançamento", "lancamentos", "lançamentos", "debito", "débito", "credito", "crédito", "registrar", "valor", "data", "descricao", "descrição"],
-    answer: "Novo lançamento fica abaixo dos gráficos, no painel da esquerda. Primeiro escolha Crédito ou Débito. Depois preencha Conta, Valor, Data, Descrição e Cliente. O botão Registrar lançamento grava a movimentação. A lista Lançamentos fica mais abaixo e mostra o histórico em tabela com Data, Descrição, Tipo e Valor."
-  },
-  {
-    keywords: ["saldo", "consolidado", "read model", "saldo projetado", "financeiro"],
-    answer: "O saldo aparece no card Saldo projetado, na primeira faixa do Dashboard. O consolidado diário alimenta o gráfico Fluxo diário logo abaixo. A Entries API grava o lançamento e o worker projeta os saldos por data de negócio no read model."
-  },
-  {
-    keywords: ["teste de carga", "carga", "k6", "rps", "cenario", "cenário", "spike", "normal", "recovery"],
-    answer: "Teste de carga fica abaixo dos gráficos, no painel da direita, e também tem atalho no menu lateral. Ele mostra botões de cenário como Normal, Carga 50, Carga 100, Pico 200 e Recuperação. Abaixo dos botões ficam Leitura banco, Escrita banco, Total banco e Erros 5xx. O k6 real de 50 RPS está documentado em docs/testing."
-  },
-  {
-    keywords: ["monitor", "monitoramento", "sistema", "banco", "outbox", "error budget", "health", "saude", "saúde", "rabbit", "redis", "api boundary", "ai boundary"],
-    answer: "Monitoramento fica no menu lateral e a seção aparece depois de Clientes quando a página é rolada. Ele mostra RPS leitura, RPS escrita, Outbox pendente e Error budget. Logo abaixo há a grade de saúde: Entries API, Read DB, RabbitMQ, Redis, Observability e AI boundary."
-  },
-  {
-    keywords: ["alerta", "alertas", "regra", "regras", "incidente", "silenciado", "ativo"],
-    answer: "Alertas fica no menu lateral e a seção aparece no fim do portal. No topo há o título Controle de alertas com badge Normal ou Incidente simulado. O bloco principal lista regras com checkbox para habilitar/silenciar, métrica atual, limite e status. Abaixo fica o feed de eventos ativos."
-  },
-  {
-    keywords: ["cliente", "clientes", "cadastro"],
-    answer: "Clientes fica no menu lateral e também como seção abaixo da tabela de Lançamentos. Ele lista os clientes seed disponíveis na UAT em cards simples, mostrando nome e versão. No formulário Novo lançamento, o campo Cliente usa essa mesma base para vincular uma movimentação."
-  },
-  {
-    keywords: ["manual", "documentacao", "documentação", "instrucoes", "instruções"],
-    answer: "Manual aparece em dois lugares: na tela de login, abaixo do botão Entrar, e no último item do menu lateral depois do login. Ele abre /manual.html em nova aba com instruções de uso, segurança, rotas, operação e troubleshooting."
-  },
-  {
-    keywords: ["swagger", "openapi", "rota", "rotas", "endpoint", "api", "json"],
-    answer: "Swagger não fica no menu lateral. Abra /swagger no mesmo domínio para ver as rotas documentadas. O contrato OpenAPI bruto fica em /openapi/v1.json. As principais áreas são login/recaptcha, entries, consolidated, observability e health checks."
-  },
-  {
-    keywords: ["agente", "robo", "robô", "chat", "conversar", "conversa local", "ligacao", "ligação", "telefone", "ligar"],
-    answer: "O Agente Vertx fica fixo no canto inferior esquerdo da tela autenticada. Ao clicar no ícone, as opções aparecem acima dele: Conversar por chat, Conversar local e Conversar por ligação. O chat responde dentro do portal. Conversa local e ligação estão preparados visualmente; a integração real vem depois."
-  },
-  {
-    keywords: ["producao", "produção", "uat", "endereco", "endereço", "url", "dominio", "domínio"],
-    answer: "Produção pública: https://vertx.dwilon.com/. UAT reservada: https://uat.vertx.dwilon.com/. Dentro do portal, o ambiente aparece no topo esquerdo e também na marca do menu lateral."
-  },
-  {
-    keywords: ["seguranca", "segurança", "enterprise", "protecao", "proteção"],
-    answer: "A segurança visível no portal começa no login com senha e Google reCAPTCHA v2 validado no BFF. No topo autenticado aparece o usuário da sessão. Na arquitetura, há headers de tenant/usuário, containers com usuário não root, filesystem read-only, cap_drop ALL, no-new-privileges e health checks documentados."
-  }
+  { id: "agent-welcome", role: "agent", text: "Olá, eu sou o agente Vertx. Estou conectado ao subagente com LLM local em GPU e RAG governado para orientar o uso do portal." }
 ]
 
 function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -591,17 +510,19 @@ function Shell({ session, onLogout }: { session: LoginSession; onLogout: () => v
           </div>
         </section>
       </main>
-      <FloatingAgent />
+      <FloatingAgent session={session} />
     </div>
   )
 }
 
-function FloatingAgent() {
+function FloatingAgent({ session }: { session: LoginSession }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [mode, setMode] = useState<AgentMode | null>(null)
   const [messages, setMessages] = useState<AgentMessage[]>(initialAgentMessages)
   const [draft, setDraft] = useState("")
   const [phoneNumber, setPhoneNumber] = useState("")
+  const [agentPending, setAgentPending] = useState(false)
+  const [agentError, setAgentError] = useState<string | null>(null)
   const feedRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -615,17 +536,48 @@ function FloatingAgent() {
     setMenuOpen(false)
   }
 
-  function sendMessage(event: FormEvent<HTMLFormElement>) {
+  async function sendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const text = draft.trim()
-    if (!text) {
+    if (!text || agentPending) {
       return
     }
 
     const userMessage: AgentMessage = { id: crypto.randomUUID(), role: "user", text }
-    const agentMessage: AgentMessage = { id: crypto.randomUUID(), role: "agent", text: buildAgentReply(text) }
-    setMessages(current => [...current, userMessage, agentMessage])
+    const nextMessages = [...messages, userMessage]
+    setMessages(nextMessages)
     setDraft("")
+    setAgentError(null)
+    setAgentPending(true)
+
+    try {
+      const answer = await request<AgentChatResponse>("/api/agent/chat", {
+        method: "POST",
+        body: JSON.stringify({
+          sessionId: session.pendingSessionId,
+          channel: "portal-chat",
+          messages: nextMessages.slice(-8).map(message => ({
+            role: message.role === "agent" ? "assistant" : "user",
+            text: message.text
+          }))
+        })
+      })
+      setMessages(current => [...current, {
+        id: crypto.randomUUID(),
+        role: "agent",
+        text: answer.reply,
+        citations: answer.citations
+      }])
+    } catch (failure) {
+      setAgentError(readError(failure))
+      setMessages(current => [...current, {
+        id: crypto.randomUUID(),
+        role: "agent",
+        text: "Não consegui consultar o subagente agora. Tente novamente em instantes."
+      }])
+    } finally {
+      setAgentPending(false)
+    }
   }
 
   return (
@@ -651,13 +603,18 @@ function FloatingAgent() {
               <div className="agent-chat-feed" ref={feedRef}>
                 {messages.map(message => (
                   <div className={`agent-message ${message.role}`} key={message.id}>
-                    <span>{message.text}</span>
+                    <div className="agent-bubble">
+                      {message.role === "agent" ? renderAgentText(message.text) : <p>{message.text}</p>}
+                      {message.citations?.length ? <small className="agent-citations">Fontes: {message.citations.map(citation => citation.id).join(", ")}</small> : null}
+                    </div>
                   </div>
                 ))}
+                {agentPending && <div className="agent-message agent"><div className="agent-bubble">Consultando subagente com RAG e LLM em GPU...</div></div>}
               </div>
+              {agentError && <p className="agent-panel-error">{agentError}</p>}
               <form className="agent-chat-form" onSubmit={sendMessage}>
                 <input aria-label="Mensagem para o agente" value={draft} onChange={event => setDraft(event.target.value)} placeholder="Digite sua pergunta" />
-                <button aria-label="Enviar mensagem" type="submit"><Send size={18} /></button>
+                <button aria-label="Enviar mensagem" disabled={agentPending} type="submit"><Send size={18} /></button>
               </form>
             </>
           )}
@@ -712,26 +669,88 @@ function agentModeLabel(mode: AgentMode) {
   return "Conversar por ligação"
 }
 
-function buildAgentReply(text: string) {
-  const normalized = normalizeAgentText(text)
-  const matchedTopic = portalGuideTopics.find(topic => topic.keywords.some(keyword => normalized.includes(normalizeAgentText(keyword))))
-  if (matchedTopic) {
-    return matchedTopic.answer
+function renderAgentText(text: string) {
+  const blocks: React.ReactNode[] = []
+  let unorderedItems: string[] = []
+  let orderedItems: string[] = []
+
+  function flushLists() {
+    if (orderedItems.length) {
+      blocks.push(<ol key={`ol-${blocks.length}`}>{orderedItems.map((item, index) => <li key={`${index}-${item}`}>{renderInlineAgentText(item)}</li>)}</ol>)
+      orderedItems = []
+    }
+
+    if (unorderedItems.length) {
+      blocks.push(<ul key={`ul-${blocks.length}`}>{unorderedItems.map((item, index) => <li key={`${index}-${item}`}>{renderInlineAgentText(item)}</li>)}</ul>)
+      unorderedItems = []
+    }
   }
 
-  if (asksForPortalMap(normalized)) {
-    return portalMapAnswer
+  text.split(/\r?\n/).forEach((line, index) => {
+    const trimmed = line.trim()
+    if (!trimmed) {
+      flushLists()
+      return
+    }
+
+    const ordered = trimmed.match(/^\d+[.)]\s+(.+)$/)
+    if (ordered) {
+      if (unorderedItems.length) {
+        flushLists()
+      }
+      orderedItems.push(ordered[1])
+      return
+    }
+
+    const unordered = trimmed.match(/^[-*]\s+(.+)$/)
+    if (unordered) {
+      if (orderedItems.length) {
+        flushLists()
+      }
+      unorderedItems.push(unordered[1])
+      return
+    }
+
+    flushLists()
+    const heading = trimmed.match(/^#{1,3}\s+(.+)$/)
+    if (heading) {
+      blocks.push(<strong className="agent-text-title" key={`h-${index}`}>{renderInlineAgentText(heading[1])}</strong>)
+      return
+    }
+
+    if (trimmed.endsWith(":") && trimmed.length <= 80) {
+      blocks.push(<strong className="agent-text-title" key={`t-${index}`}>{renderInlineAgentText(trimmed)}</strong>)
+      return
+    }
+
+    blocks.push(<p key={`p-${index}`}>{renderInlineAgentText(trimmed)}</p>)
+  })
+
+  flushLists()
+  return blocks.length ? blocks : <p>{text}</p>
+}
+
+function renderInlineAgentText(text: string) {
+  const parts: React.ReactNode[] = []
+  const boldPattern = /\*\*([^*]+)\*\*/g
+  let lastIndex = 0
+  let match = boldPattern.exec(text)
+
+  while (match) {
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index))
+    }
+
+    parts.push(<strong key={`${match.index}-${match[1]}`}>{match[1]}</strong>)
+    lastIndex = match.index + match[0].length
+    match = boldPattern.exec(text)
   }
 
-  return "Posso te orientar pelo mapa do portal. Pergunte, por exemplo: onde fica Novo lançamento, Dashboard, Monitoramento, Alertas, Teste de carga, Clientes, Manual, Swagger ou Agente."
-}
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex))
+  }
 
-function normalizeAgentText(text: string) {
-  return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
-}
-
-function asksForPortalMap(normalized: string) {
-  return ["ajuda", "mapa", "portal", "tela", "onde", "localizacao", "posicao", "tudo"].some(term => normalized.includes(term))
+  return parts.length ? parts : text
 }
 
 function Metric({ title, value, icon, tone = "normal" }: { title: string; value: string; icon: React.ReactNode; tone?: "normal" | "warning" | "critical" }) {

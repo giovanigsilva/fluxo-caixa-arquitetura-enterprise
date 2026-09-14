@@ -71,6 +71,10 @@ internal static class SwaggerDocumentation
       "description": "Login local com senha e validação Google reCAPTCHA v2 checkbox."
     },
     {
+      "name": "Support agent",
+      "description": "Subagente de apoio com LLM local em GPU e RAG governado."
+    },
+    {
       "name": "Entries - customers",
       "description": "Clientes e contrapartes comerciais por tenant."
     },
@@ -193,6 +197,38 @@ internal static class SwaggerDocumentation
           "400": { "$ref": "#/components/responses/BadRequest" },
           "401": { "$ref": "#/components/responses/Unauthorized" },
           "403": { "$ref": "#/components/responses/Forbidden" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/api/agent/chat": {
+      "post": {
+        "tags": ["Support agent"],
+        "operationId": "chatWithSupportAgent",
+        "summary": "Conversa com o subagente",
+        "description": "Encaminha a conversa para o SupportAgent.Api. O subagente usa RAG governado antes de chamar o LLM local em GPU e só responde com base em documentos internos recuperados.",
+        "parameters": [
+          { "$ref": "#/components/parameters/TenantIdHeader" },
+          { "$ref": "#/components/parameters/UserIdHeader" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/AgentChatRequest" },
+              "example": {
+                "sessionId": "ps_00000000000000000000000000000000",
+                "channel": "portal-chat",
+                "messages": [
+                  { "role": "user", "text": "Onde fica o novo lançamento?" }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "$ref": "#/components/responses/AgentChatResponse" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
           "503": { "$ref": "#/components/responses/ServiceUnavailable" }
         }
       }
@@ -887,6 +923,23 @@ internal static class SwaggerDocumentation
           }
         }
       },
+      "AgentChatResponse": {
+        "description": "Resposta do subagente com modo de execução e fontes RAG.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/AgentChatResponse" },
+            "example": {
+              "reply": "Novo lançamento fica abaixo dos gráficos, no painel da esquerda. Fontes: entries.form",
+              "model": "Qwen/Qwen3.5-35B-A3B-GPTQ-Int4",
+              "mode": "rag-grounded-llm",
+              "citations": [
+                { "id": "entries.form", "title": "Novo lançamento" }
+              ],
+              "refusalReason": null
+            }
+          }
+        }
+      },
       "Customer": {
         "description": "Cliente.",
         "content": {
@@ -1097,6 +1150,50 @@ internal static class SwaggerDocumentation
           "userId": { "type": "string", "example": "user-admin-alpha" },
           "displayName": { "type": "string", "example": "Administrador Financeiro Alfa" },
           "expiresAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "AgentChatRequest": {
+        "type": "object",
+        "required": ["messages"],
+        "properties": {
+          "sessionId": { "type": "string", "nullable": true, "example": "ps_00000000000000000000000000000000" },
+          "channel": { "type": "string", "enum": ["portal-chat", "telephony-support"], "example": "portal-chat" },
+          "messages": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 16,
+            "items": { "$ref": "#/components/schemas/AgentChatMessage" }
+          }
+        }
+      },
+      "AgentChatMessage": {
+        "type": "object",
+        "required": ["role", "text"],
+        "properties": {
+          "role": { "type": "string", "enum": ["user", "assistant", "agent"], "example": "user" },
+          "text": { "type": "string", "minLength": 1, "maxLength": 2000, "example": "Onde fica o Dashboard?" }
+        }
+      },
+      "AgentChatResponse": {
+        "type": "object",
+        "required": ["reply", "model", "mode", "citations"],
+        "properties": {
+          "reply": { "type": "string", "description": "Resposta final gerada pelo LLM local, limitada pelo RAG governado." },
+          "model": { "type": "string", "example": "Qwen/Qwen3.5-35B-A3B-GPTQ-Int4" },
+          "mode": { "type": "string", "enum": ["rag-grounded-llm", "policy-refusal"], "example": "rag-grounded-llm" },
+          "citations": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/RagCitation" }
+          },
+          "refusalReason": { "type": "string", "nullable": true, "description": "Motivo quando a política ou falta de evidência bloqueia a resposta." }
+        }
+      },
+      "RagCitation": {
+        "type": "object",
+        "required": ["id", "title"],
+        "properties": {
+          "id": { "type": "string", "example": "dashboard.metrics" },
+          "title": { "type": "string", "example": "Dashboard e cards executivos" }
         }
       },
       "TenantEntityBase": {

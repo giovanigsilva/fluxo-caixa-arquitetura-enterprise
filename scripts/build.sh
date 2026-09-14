@@ -19,6 +19,7 @@ publish management-api src/Management/Vertx.CashFlow.Management.Api/Vertx.CashFl
 publish entries-api src/Entries/Vertx.CashFlow.Entries.Api/Vertx.CashFlow.Entries.Api.csproj
 publish consolidation-api src/Consolidation/Vertx.CashFlow.Consolidation.Api/Vertx.CashFlow.Consolidation.Api.csproj
 publish observability-api src/ObservabilitySimulation/Vertx.CashFlow.ObservabilitySimulation.Api/Vertx.CashFlow.ObservabilitySimulation.Api.csproj
+publish support-agent-api src/SupportAgent/Vertx.CashFlow.SupportAgent.Api/Vertx.CashFlow.SupportAgent.Api.csproj
 publish outbox-relay src/OutboxRelay/Vertx.CashFlow.OutboxRelay/Vertx.CashFlow.OutboxRelay.csproj
 publish consolidation-worker src/ConsolidationWorker/Vertx.CashFlow.ConsolidationWorker/Vertx.CashFlow.ConsolidationWorker.csproj
 publish reports-worker src/ReportsWorker/Vertx.CashFlow.ReportsWorker/Vertx.CashFlow.ReportsWorker.csproj

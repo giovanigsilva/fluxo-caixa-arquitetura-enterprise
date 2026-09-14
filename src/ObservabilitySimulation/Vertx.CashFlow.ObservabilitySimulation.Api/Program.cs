@@ -126,7 +126,7 @@ internal sealed class SimulationEngine
                 rabbitMq = scenario.Equals("BROKER_DOWN", StringComparison.OrdinalIgnoreCase) ? "simulated-down" : "operational-simulated",
                 redisCache = scenario.Equals("REDIS_DOWN", StringComparison.OrdinalIgnoreCase) ? "simulated-down" : "operational-simulated",
                 observabilityStack = "prepared-disabled",
-                aiAssistant = "future-disabled"
+                aiAssistant = "support-agent-rag-llm-enabled"
             },
             Metrics: new
             {

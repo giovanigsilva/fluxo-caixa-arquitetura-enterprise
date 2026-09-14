@@ -30,6 +30,9 @@
   <Folder Name="/src/ReportsWorker/">
     <Project Path="src/ReportsWorker/Vertx.CashFlow.ReportsWorker/Vertx.CashFlow.ReportsWorker.csproj" />
   </Folder>
+  <Folder Name="/src/SupportAgent/">
+    <Project Path="src/SupportAgent/Vertx.CashFlow.SupportAgent.Api/Vertx.CashFlow.SupportAgent.Api.csproj" />
+  </Folder>
   <Folder Name="/tests/" />
   <Folder Name="/tests/Security/">
     <Project Path="tests/Security/Vertx.CashFlow.SecurityTests/Vertx.CashFlow.SecurityTests.csproj" />

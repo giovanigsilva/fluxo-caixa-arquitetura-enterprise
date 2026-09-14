@@ -42,6 +42,7 @@ services:
       MANAGEMENT_URL: http://management-api:8080
       CONSOLIDATION_URL: http://consolidation-api:8080
       OBSERVABILITY_URL: http://observability-api:8080
+      SUPPORT_AGENT_URL: http://support-agent-api:8080
     depends_on:
       entries-api:
         condition: service_started
@@ -50,6 +51,8 @@ services:
       consolidation-api:
         condition: service_started
       observability-api:
+        condition: service_started
+      support-agent-api:
         condition: service_started
 
   web:
@@ -106,6 +109,26 @@ services:
     volumes:
       - ../../.runtime/publish/observability-api:/app:ro
       - ../../.runtime/uat:/runtime
+
+  support-agent-api:
+    <<: *dotnet-service
+    container_name: teste-pratico-support-agent-api
+    command: ["dotnet", "Vertx.CashFlow.SupportAgent.Api.dll"]
+    volumes:
+      - ../../.runtime/publish/support-agent-api:/app:ro
+      - ../../.runtime/uat:/runtime
+    environment:
+      ASPNETCORE_ENVIRONMENT: UAT
+      ASPNETCORE_URLS: http://+:8080
+      VERTX_AGENT_LLM_BASE_URL: http://qwen3-llm-realtime-test:8000
+      VERTX_AGENT_LLM_MODEL: Qwen/Qwen3.5-35B-A3B-GPTQ-Int4
+      VERTX_AGENT_LLM_TIMEOUT_SECONDS: "45"
+      VERTX_AGENT_LLM_MAX_TOKENS: "1200"
+      VERTX_AGENT_LLM_TEMPERATURE: "0.15"
+      VERTX_AGENT_RAG_MIN_SCORE: "2.0"
+    networks:
+      - app
+      - support-llm
 
   outbox-relay:
     <<: *dotnet-service
@@ -222,6 +245,9 @@ services:
 networks:
   app:
     name: teste-pratico-app
+  support-llm:
+    external: true
+    name: census-realtime-agent-test_realtime
 
 secrets:
   postgres_write_password:

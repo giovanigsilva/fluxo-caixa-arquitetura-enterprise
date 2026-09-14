@@ -51,7 +51,8 @@ O sistema registra e consulta fluxo de caixa multi-tenant. A entrega atual inclu
 - monitoramento sintetico;
 - controle de alertas simulado;
 - teste de carga simulado;
-- agente Vertx flutuante para chat contextual e modos de atendimento visual;
+- agente Vertx flutuante com chat real via subagente, RAG governado e modos de
+  atendimento visual;
 - Swagger com todas as rotas expostas pelo BFF;
 - health checks;
 - workers de outbox, consolidacao e relatorios.
@@ -81,21 +82,28 @@ O menu lateral organiza a operacao por area:
 
 ## Agente Vertx
 
-O simbolo do agente fica fixo no canto inferior esquerdo da tela autenticada.
+O simbolo do agente fica fixo no canto inferior direito da tela autenticada.
 Ao clicar nele, aparecem tres opcoes acima do simbolo:
 
-- `Conversar por chat`: abre um chat local dentro do portal. Nesta etapa, o
-  agente responde com orientacoes sobre localizacao, posicao e funcao de cada
-  area: login, menu lateral, topo, dashboard, graficos, lancamentos,
-  monitoramento, alertas, teste de carga, clientes, manual, Swagger e o proprio
-  agente.
+- `Conversar por chat`: abre um chat real no portal. O navegador envia a
+  conversa para o BFF, que encaminha ao `SupportAgent API`. Esse subagente usa
+  RAG governado e o LLM local em GPU `Qwen/Qwen3.5-35B-A3B-GPTQ-Int4`.
+  As respostas sao maiores, formatadas em blocos/listas e citam fontes internas
+  do RAG.
 - `Conversar local`: abre a tela visual do modo de voz local. A ativacao real de
   microfone sera detalhada em etapa posterior.
 - `Conversar por ligacao`: abre a tela visual com campo para numero de telefone.
   A discagem real e a escolha do provedor telefonico serao detalhadas depois.
 
-O chat atual nao cria lancamentos automaticamente e nao chama APIs financeiras
-sozinho. Ele e uma camada de apoio visual/local para orientar a operacao.
+O RAG do agente contem documentos curados sobre login, menu lateral, topo,
+dashboard, graficos, lancamentos, clientes, monitoramento, alertas, teste de
+carga, manual, Swagger, seguranca e o proprio agente. Se a pergunta nao tiver
+evidencia nesses documentos, o agente recusa. Ele tambem bloqueia prompt
+injection, pedidos de secrets/tokens, arquivos sensiveis, comandos destrutivos e
+operacoes financeiras automaticas.
+
+O chat nao cria lancamentos automaticamente e nao chama APIs financeiras sozinho.
+Ele orienta o operador a usar a tela correta.
 
 ## Dashboard
 
@@ -186,7 +194,8 @@ Saude dos componentes:
 - `RabbitMQ`: broker planejado/simulado.
 - `Redis`: cache/quota planejado/simulado.
 - `Observability`: stack preparada.
-- `AI boundary`: fronteira futura de IA, desabilitada nesta entrega.
+- `AI boundary`: indica o subagente de apoio com RAG governado e LLM local em
+  GPU.
 
 ## Controle De Alertas
 

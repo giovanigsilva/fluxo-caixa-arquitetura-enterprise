@@ -110,6 +110,7 @@ MapProxy(app, "/api/entries/{**path}", "ENTRIES_URL", "http://127.0.0.1:6222", "
 MapProxy(app, "/api/management/{**path}", "MANAGEMENT_URL", "http://127.0.0.1:6221", "/api/v1/");
 MapProxy(app, "/api/consolidated/{**path}", "CONSOLIDATION_URL", "http://127.0.0.1:6223", "/api/v1/");
 MapProxy(app, "/api/observability/{**path}", "OBSERVABILITY_URL", "http://127.0.0.1:6224", "/api/v1/");
+MapProxy(app, "/api/agent/{**path}", "SUPPORT_AGENT_URL", "http://127.0.0.1:6225", "/api/v1/");
 
 app.Run();
 

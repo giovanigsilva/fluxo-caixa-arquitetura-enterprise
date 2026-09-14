@@ -110,16 +110,16 @@ Senha: Vtx-1d7d875ea260072afc7fa86d</pre>
 
       <section id="agente">
         <h2>Agente Vertx</h2>
-        <p>O simbolo do agente fica fixo no canto inferior esquerdo da tela autenticada. Ao clicar, aparecem tres opcoes acima dele.</p>
+        <p>O simbolo do agente fica fixo no canto inferior direito da tela autenticada. Ao clicar, aparecem tres opcoes acima dele.</p>
         <table>
           <thead><tr><th>Opcao</th><th>Funcao nesta etapa</th></tr></thead>
           <tbody>
-            <tr><td>Conversar por chat</td><td>Abre um chat local com guia contextual de localizacao, posicao e funcao de login, menu, topo, dashboard, graficos, lancamentos, monitoramento, alertas, teste de carga, clientes, manual, Swagger e agente.</td></tr>
+            <tr><td>Conversar por chat</td><td>Abre um chat real via BFF e SupportAgent API. O subagente usa RAG governado e LLM local em GPU para responder de forma formatada sobre localizacao, posicao e funcao de login, menu, topo, dashboard, graficos, lancamentos, monitoramento, alertas, teste de carga, clientes, manual, Swagger e agente.</td></tr>
             <tr><td>Conversar local</td><td>Mostra a tela visual preparada para conversa por voz local. A ativacao real do microfone sera detalhada depois.</td></tr>
             <tr><td>Conversar por ligacao</td><td>Mostra campo para informar telefone. A discagem real e o provedor telefonico serao definidos na proxima etapa.</td></tr>
           </tbody>
         </table>
-        <p>O chat nao cria lancamentos automaticamente e nao chama APIs financeiras sozinho.</p>
+        <p>O RAG bloqueia respostas sem evidencia, prompt injection, secrets, tokens, arquivos sensiveis, comandos destrutivos e operacoes financeiras automaticas. O chat nao cria lancamentos automaticamente e nao chama APIs financeiras sozinho.</p>
       </section>
 
       <section id="dashboard">
