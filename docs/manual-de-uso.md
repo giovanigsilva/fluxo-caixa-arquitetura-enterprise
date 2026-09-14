@@ -97,7 +97,7 @@ Ao clicar nele, aparecem tres opcoes acima do simbolo:
   local, ignora audio vazio/sem nexo/sem contexto autorizado, consulta o mesmo
   RAG/LLM governado, usa o MCP readonly quando a fala pede indicadores atuais e
   reproduz uma resposta curta em texto plano com o Matcha TTS atual
-  `freds-cml-stress-1000`. A voz nativa do navegador fica apenas como fallback
+  `f11-slerp60`, mistura validada com 60% F11 e 40% MA_HV136. A voz nativa do navegador fica apenas como fallback
   caso o Matcha esteja indisponivel ou nao autorizado.
 - `Conversar por ligacao`: abre a tela visual com campo para numero de telefone.
   Informe o telefone com DDD e acione `Ligar com agente`. O portal chama
@@ -114,7 +114,7 @@ proprio agente. Se a pergunta nao tiver evidencia nesses documentos, o agente
 recusa. Ele tambem bloqueia prompt injection, pedidos de secrets/tokens,
 arquivos sensiveis, comandos destrutivos e operacoes financeiras automaticas.
 Na ligacao, o agente nao fixa caller ID e usa Matcha TTS
-`freds-cml-stress-1000`, normalizacao de pontuacao, filtro de backchannel e
+`f11-slerp60`, normalizacao de pontuacao, filtro de backchannel e
 limite de 120 segundos, em um bridge separado dos fluxos de cobranca, SDR e
 pesquisa.
 
@@ -128,8 +128,8 @@ do usuario e o cenario selecionado no dashboard. O endpoint de auditoria e
 Na conversa local, a fala do agente usa `POST /api/agent/tts/synthesize`. O
 SupportAgent envia o texto limpo para o Matcha TTS atual em
 `/research/synthesize`, recebe `audio/L16`, converte para WAV e entrega ao
-navegador. A voz/modelo configurada e `freds-cml-stress-1000`, reaproveitando a
-voz corrente sem expor o Matcha diretamente ao navegador.
+navegador. A voz/modelo configurada e `f11-slerp60`, sem expor o Matcha
+diretamente ao navegador.
 
 Cumprimentos como "oi", "ola", "bom dia", agradecimentos, despedidas e
 perguntas simples sobre quem e o agente sao permitidos para que a conversa fique

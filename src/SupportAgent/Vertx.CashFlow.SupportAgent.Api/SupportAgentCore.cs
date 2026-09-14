@@ -38,9 +38,9 @@ internal sealed record AgentConfiguration(
         return new AgentConfiguration(
             Environment.GetEnvironmentVariable("VERTX_AGENT_LLM_BASE_URL") ?? "http://127.0.0.1:8220",
             Environment.GetEnvironmentVariable("VERTX_AGENT_ASR_BASE_URL") ?? "http://127.0.0.1:8224",
-            Environment.GetEnvironmentVariable("VERTX_AGENT_TTS_BASE_URL") ?? "http://matcha-tts-freds-cml-stress-1000:8101",
+            Environment.GetEnvironmentVariable("VERTX_AGENT_TTS_BASE_URL") ?? "http://matcha-tts-f11-slerp60:8101",
             Environment.GetEnvironmentVariable("VERTX_AGENT_TTS_ENDPOINT") ?? "research/synthesize",
-            Environment.GetEnvironmentVariable("VERTX_AGENT_TTS_VOICE_ID") ?? "freds-cml-stress-1000",
+            Environment.GetEnvironmentVariable("VERTX_AGENT_TTS_VOICE_ID") ?? "f11-slerp60",
             ParseBool("VERTX_AGENT_TELEPHONY_ENABLED", false),
             Environment.GetEnvironmentVariable("VERTX_AGENT_TELEPHONY_BASE_URL") ?? string.Empty,
             Environment.GetEnvironmentVariable("VERTX_AGENT_TELEPHONY_START_PATH") ?? "jobs/start",

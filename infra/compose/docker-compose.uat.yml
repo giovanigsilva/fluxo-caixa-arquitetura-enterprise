@@ -122,9 +122,9 @@ services:
       ASPNETCORE_URLS: http://+:8080
       VERTX_AGENT_LLM_BASE_URL: http://qwen3-llm-realtime-test:8000
       VERTX_AGENT_ASR_BASE_URL: http://qwen3-asr-offline-test:8765
-      VERTX_AGENT_TTS_BASE_URL: http://matcha-tts-freds-cml-stress-1000:8101
+      VERTX_AGENT_TTS_BASE_URL: http://matcha-tts-f11-slerp60:8101
       VERTX_AGENT_TTS_ENDPOINT: research/synthesize
-      VERTX_AGENT_TTS_VOICE_ID: freds-cml-stress-1000
+      VERTX_AGENT_TTS_VOICE_ID: f11-slerp60
       VERTX_AGENT_TTS_TIMEOUT_SECONDS: "45"
       VERTX_AGENT_TELEPHONY_ENABLED: "true"
       VERTX_AGENT_TELEPHONY_BASE_URL: http://vertx-portal-vero-bridge:8080

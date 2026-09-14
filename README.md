@@ -259,7 +259,7 @@ Browser/Cliente HTTP
       -> MCP readonly do portal
          -> Entries API / Consolidation API / Observability Simulation API
       -> Qwen/Qwen3.5-35B-A3B-GPTQ-Int4 via vLLM em GPU
-      -> Matcha TTS freds-cml-stress-1000 para fala local do portal
+      -> Matcha TTS f11-slerp60 para fala local do portal
   -> Workers locais
     -> Outbox Relay
     -> Consolidation Worker
@@ -320,7 +320,7 @@ o subagente transcreve com Qwen3-ASR local e responde com o mesmo RAG/LLM
 governado, usando o MCP readonly quando a fala pede indicadores atuais. Áudio
 vazio, sem nexo ou sem contexto autorizado é ignorado sem fala.
 A reprodução de voz usa como caminho principal o Matcha TTS atual
-`freds-cml-stress-1000`, o mesmo backend validado para a voz corrente. O
+`f11-slerp60`, uma mistura validada com 60% F11 e 40% MA_HV136. O
 SupportAgent chama `POST /research/synthesize`, recebe `audio/L16`, converte
 para WAV e entrega ao navegador em `POST /api/agent/tts/synthesize`. A voz
 nativa do navegador fica apenas como fallback se o Matcha estiver indisponível
@@ -343,7 +343,7 @@ No host de telefonia, o bridge isolado fica documentado em
 Ele usa Vero por IP/porta, `SIP_OUTBOUND_DIAL_FORMAT=vero`, sem caller ID fixo,
 porta SIP dedicada `5067/udp`, RTP `4020/4021` e conecta no agente
 SIP `ddr-agent-vertx-portal-support`. O agente SIP fica dedicado ao portal e usa
-Matcha TTS `freds-cml-stress-1000`, normalização de pontuação, filtro de
+Matcha TTS `f11-slerp60`, normalização de pontuação, filtro de
 backchannel expandido, resposta calorosa e limite de 120 segundos. O fluxo é
 separado dos workers de cobrança, SDR e pesquisa para não
 misturar campanha com suporte do portal.
@@ -890,8 +890,8 @@ Refazer tudo do zero sem apagar volumes manualmente:
 - A Observability API retorna telemetria sintética rotulada.
 - O agente usa LLM local em GPU com RAG governado, MCP readonly do portal,
   conversa local por microfone com Qwen3-ASR e fala principal pelo Matcha TTS
-  atual `freds-cml-stress-1000`. `speechSynthesis` do navegador fica apenas como
-  fallback; discagem real ainda é etapa futura.
+  atual `f11-slerp60`. `speechSynthesis` do navegador fica apenas como
+  fallback; a ligação real usa o bridge Vero dedicado do portal.
 - O QR Code do Google Fraud Defense depende de allowlist da Google e ativação do
   fluxo reCAPTCHA Enterprise; hoje está ativo o Google reCAPTCHA v2 checkbox.
 - O domínio profundo `uat.vertx.dwilon.com` pode exigir certificado Cloudflare
