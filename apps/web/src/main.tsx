@@ -714,7 +714,7 @@ function FloatingAgent({ session }: { session: LoginSession }) {
 
     const utterance = new SpeechSynthesisUtterance(stripAgentSourceLine(reply))
     utterance.lang = "pt-BR"
-    utterance.rate = 1
+    utterance.rate = 1.2
     utterance.pitch = 1
     utterance.onend = () => setVoiceState("idle")
     utterance.onerror = () => setVoiceState("idle")
