@@ -820,7 +820,7 @@ function FloatingAgent({ session }: { session: LoginSession }) {
 
       <button className="agent-launcher" aria-label="Abrir agente Vertx" onClick={() => mode ? setMode(null) : setMenuOpen(open => !open)} type="button">
         <Bot size={28} />
-        <span>Agente</span>
+        <span>Posso te ajudar?</span>
       </button>
     </div>
   )
