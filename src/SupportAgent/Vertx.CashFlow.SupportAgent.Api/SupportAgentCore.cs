@@ -351,7 +351,6 @@ internal sealed class PortalTelephonyClient(HttpClient httpClient, AgentConfigur
             ["campaign_id"] = "vertx-portal-guided-call",
             ["campaign_name"] = "Suporte Vertx por telefone",
             ["telefone"] = normalizedPhone,
-            ["phone_number"] = normalizedPhone,
             ["cod_devedor"] = callId,
             ["primeiro_nome"] = "Usuario",
             ["operador"] = "Agente Vertx",
