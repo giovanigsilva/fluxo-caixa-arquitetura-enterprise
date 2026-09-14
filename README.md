@@ -56,12 +56,13 @@ inclui:
 - Consolidation Worker projetando eventos publicados.
 - Reports Worker gerando CSV, XLSX e PDF.
 - Observability Simulation API com cenários sintéticos claramente rotulados.
-- SupportAgent API com RAG governado e LLM local em GPU.
+- SupportAgent API com RAG governado, MCP readonly do portal e LLM local em GPU.
 - SPA React/Vite em português do Brasil consumindo o BFF.
 - Tela inicial pública com login, senha e Google reCAPTCHA v2 validado no BFF.
 - Agente Vertx flutuante no canto inferior direito, com chat real via
-  subagente, respostas longas formatadas, conversa local visual e ligação
-  preparada visualmente.
+  subagente, consulta MCP readonly para dados atuais da tela, respostas longas
+  formatadas, conversa local com Matcha TTS atual e ligação preparada
+  visualmente.
 - Swagger/OpenAPI 100% documentado para todas as rotas expostas pelo BFF.
 - Benchmark k6 do consolidado diário validado a 50 RPS por 10 minutos, com
   0.00% de falhas.
@@ -255,7 +256,10 @@ Browser/Cliente HTTP
     -> Observability Simulation API
     -> SupportAgent API
       -> RAG governado
+      -> MCP readonly do portal
+         -> Entries API / Consolidation API / Observability Simulation API
       -> Qwen/Qwen3.5-35B-A3B-GPTQ-Int4 via vLLM em GPU
+      -> Matcha TTS freds-cml-stress-1000 para fala local do portal
   -> Workers locais
     -> Outbox Relay
     -> Consolidation Worker
@@ -281,21 +285,55 @@ O controle de resposta é feito antes do LLM:
 - recuperação RAG em base curada do portal, com documentos sobre login, menu,
   topo, dashboard, gráficos, lançamentos, clientes, monitoramento, alertas,
   teste de carga, manual, Swagger, agente, segurança e cordialidades simples;
+- consulta MCP readonly quando a pergunta pede dados atuais da tela, lendo os
+  mesmos serviços usados pelo dashboard: Entries API, Consolidation API e
+  Observability Simulation API;
 - conversa social controlada para cumprimentos, agradecimentos, despedidas e
   identidade do agente, sempre redirecionando para apoio no Vertx;
 - recusa quando não existe evidência suficiente no RAG;
-- prompt final contendo somente o contexto autorizado;
+- prompt final contendo somente o contexto autorizado do RAG e, quando
+  aplicável, o snapshot MCP readonly;
 - resposta formatada em português; a API retorna fontes internas separadas para
   auditoria e a interface exibe nomes amigáveis quando relevante.
+
+O MCP do agente é um adaptador readonly. Ele não cria lançamento, não muda
+alerta, não troca cenário e não acessa secrets. Quando o usuário pergunta algo
+como "qual o saldo projetado?", "como está a latência?", "quantos req/s no
+banco?", "tem fila?", "quais alertas estão ativos?" ou "me detalhe o que está na
+tela", o agente consulta:
+
+- `GET /api/v1/entries`, `GET /api/v1/customers` e `GET /api/v1/accounts` para
+  créditos, débitos, saldo projetado, quantidade de lançamentos, contas e
+  clientes;
+- `GET /api/v1/daily` para consolidado diário, movimento líquido, entradas
+  projetadas e lag/outbox do read model;
+- `GET /api/v1/samples?environment={env}&scenario={scenarioId}` para req/s,
+  p50/p95/p99, filas, projeções, duplicados, error budget, saúde e alertas.
+
+O BFF expõe também `GET /api/agent/mcp/portal-snapshot?scenarioId=NORMAL` para
+auditoria do snapshot usado pelo agente.
 
 O mesmo subagente já aceita o canal lógico `telephony-support`, reservado para a
 telefonia de apoio. O canal `portal-voice` atende conversa local por microfone:
 o navegador envia WAV na taxa nativa do dispositivo após detectar pausa na fala,
 o subagente transcreve com Qwen3-ASR local e responde com o mesmo RAG/LLM
-governado. Áudio vazio, sem nexo ou sem contexto autorizado é ignorado sem fala.
-A reprodução usa a voz nativa do navegador em velocidade 1.8, com texto plano,
-curto e sem Markdown. Nesta etapa ele ainda não aciona discagem real, telefonia
-SIP nem criação automática de lançamentos.
+governado, usando o MCP readonly quando a fala pede indicadores atuais. Áudio
+vazio, sem nexo ou sem contexto autorizado é ignorado sem fala.
+A reprodução de voz usa como caminho principal o Matcha TTS atual
+`freds-cml-stress-1000`, o mesmo backend validado para a voz corrente. O
+SupportAgent chama `POST /research/synthesize`, recebe `audio/L16`, converte
+para WAV e entrega ao navegador em `POST /api/agent/tts/synthesize`. A voz
+nativa do navegador fica apenas como fallback se o Matcha estiver indisponível
+ou não autorizado. As respostas de voz continuam em texto plano, curtas e sem
+Markdown. Nesta etapa ele ainda não aciona discagem real, telefonia SIP nem
+criação automática de lançamentos.
+
+Para o Matcha research atual, o acesso é protegido por allowlist de IP interno.
+O compose reserva `10.254.240.10` para o SupportAgent UAT e `10.254.240.98`
+para o SupportAgent production na rede `census-realtime-agent-test_realtime`.
+Esses IPs precisam estar em `MATCHA_RESEARCH_ALLOWED_SOURCE_IPS` junto do IP da
+linha 9604, mantendo o mesmo serviço/modelo e sem expor o Matcha diretamente ao
+navegador.
 
 ## Trade-offs arquiteturais
 
@@ -319,6 +357,7 @@ ela trouxe, quais custos permanecem e como evoluir para produção real.
 | Cloudflare Tunnel para publicação pública | Publicar sem expor portas externas do host diretamente. | Reduz superfície de rede, mantém BFF/frontend bound em `127.0.0.1` e entrega HTTPS público no domínio principal. | Configuração operacional fica fora do Git por conter IDs/secrets; subdomínio profundo UAT depende de certificado compatível. | Documentar IaC do edge com secrets externos, certificado avançado/customizado e ambientes separados. |
 | Segurança alvo documentada mesmo quando não ativa na UAT | O PDF permite demonstrar premissas em decisões e representações arquiteturais, não só em codificação. | Mostra conhecimento de RLS, Vault, OIDC, TLS, DLQ, scans, observabilidade e resposta a falhas. | Exige honestidade: controles preparados não podem ser vendidos como ativos. | Promover os itens preparados por fase, sempre com teste, evidência e runbook. |
 | AI-first como processo, não como decisão financeira automática | O usuário pediu destacar a implementação AI-first, mas o domínio financeiro exige previsibilidade e auditoria. | Documentação, Swagger, scripts e matriz de aderência ficam legíveis para humanos e agentes de IA. | Não há IA executando lançamentos ou aprovando decisões financeiras na UAT. | Usar IA apenas como assistente auditável para suporte operacional, análise de logs e geração de relatórios, com fronteira explícita. |
+| MCP readonly para enriquecer o agente | O agente precisava responder sobre o que está na tela sem depender de números decorados no RAG. | Respostas ficam ancoradas nos serviços reais do portal: saldo, créditos, débitos, consolidado, latência, filas, projeções, req/s, saúde e alertas. | Continua sendo leitura operacional; se Entries/Consolidation/Observability estiverem indisponíveis, o agente não inventa números e informa indisponibilidade do snapshot. | Evoluir para MCP externo versionado, com autenticação própria, auditoria por ferramenta, cache curto, rate limit e permissões por tenant/role. |
 
 Resumo da decisão principal: para a prova, a escolha foi entregar o fluxo crítico
 fim a fim funcionando e medido; para produção real, a evolução correta é trocar
@@ -471,6 +510,8 @@ Health e documentação:
 Support Agent:
 
 - `POST /api/agent/chat`
+- `GET /api/agent/mcp/portal-snapshot`
+- `POST /api/agent/tts/synthesize`
 - `POST /api/agent/voice/turn`
 
 Entries:
@@ -799,9 +840,10 @@ Refazer tudo do zero sem apagar volumes manualmente:
 - RabbitMQ/Redis/Keycloak/Vault estão preparados, mas não integrados ao fluxo
   padrão validado.
 - A Observability API retorna telemetria sintética rotulada.
-- O agente usa LLM local em GPU com RAG governado e conversa local por
-  microfone com Qwen3-ASR. A voz de resposta usa `speechSynthesis` do navegador;
-  TTS dedicado do servidor e discagem real ainda são etapas futuras.
+- O agente usa LLM local em GPU com RAG governado, MCP readonly do portal,
+  conversa local por microfone com Qwen3-ASR e fala principal pelo Matcha TTS
+  atual `freds-cml-stress-1000`. `speechSynthesis` do navegador fica apenas como
+  fallback; discagem real ainda é etapa futura.
 - O QR Code do Google Fraud Defense depende de allowlist da Google e ativação do
   fluxo reCAPTCHA Enterprise; hoje está ativo o Google reCAPTCHA v2 checkbox.
 - O domínio profundo `uat.vertx.dwilon.com` pode exigir certificado Cloudflare

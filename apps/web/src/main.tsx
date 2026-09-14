@@ -90,7 +90,7 @@ const defaultAlertRules: AlertRule[] = [
   { id: "budget", label: "Error budget", metric: "errorBudgetRemaining", threshold: 0.5, unit: "", compare: "below", enabled: true, severity: "critical" }
 ]
 const initialAgentMessages: AgentMessage[] = [
-  { id: "agent-welcome", role: "agent", text: "Olá, eu sou o agente Vertx. Estou conectado ao subagente com LLM local em GPU e RAG governado para orientar o uso do portal." }
+  { id: "agent-welcome", role: "agent", text: "Olá, eu sou o agente Vertx. Estou conectado ao subagente com LLM local em GPU, RAG governado e MCP readonly para consultar os dados atuais do portal." }
 ]
 
 function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -518,12 +518,12 @@ function Shell({ session, onLogout }: { session: LoginSession; onLogout: () => v
           </div>
         </section>
       </main>
-      <FloatingAgent session={session} />
+      <FloatingAgent session={session} scenarioId={selectedScenario} />
     </div>
   )
 }
 
-function FloatingAgent({ session }: { session: LoginSession }) {
+function FloatingAgent({ session, scenarioId }: { session: LoginSession; scenarioId: string }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [mode, setMode] = useState<AgentMode | null>(null)
   const [messages, setMessages] = useState<AgentMessage[]>(initialAgentMessages)
@@ -539,6 +539,8 @@ function FloatingAgent({ session }: { session: LoginSession }) {
   const voiceProcessorRef = useRef<ScriptProcessorNode | null>(null)
   const voiceSinkRef = useRef<GainNode | null>(null)
   const voiceStreamRef = useRef<MediaStream | null>(null)
+  const voicePlaybackRef = useRef<HTMLAudioElement | null>(null)
+  const voicePlaybackUrlRef = useRef<string | null>(null)
   const voiceChunksRef = useRef<Float32Array[]>([])
   const voiceSampleRateRef = useRef<number>(48000)
   const voiceStateRef = useRef<VoiceCaptureState>("idle")
@@ -557,7 +559,7 @@ function FloatingAgent({ session }: { session: LoginSession }) {
   useEffect(() => () => {
     voiceSessionActiveRef.current = false
     stopVoiceCapture()
-    window.speechSynthesis?.cancel()
+    stopVoicePlayback()
   }, [])
 
   function openMode(nextMode: AgentMode) {
@@ -600,6 +602,7 @@ function FloatingAgent({ session }: { session: LoginSession }) {
         body: JSON.stringify({
           sessionId: session.pendingSessionId,
           channel: "portal-chat",
+          scenarioId,
           messages: nextMessages.slice(-8).map(message => ({
             role: message.role === "agent" ? "assistant" : "user",
             text: message.text
@@ -632,7 +635,7 @@ function FloatingAgent({ session }: { session: LoginSession }) {
     voiceSessionActiveRef.current = true
     voiceSendInFlightRef.current = false
     setVoiceError(null)
-    speakVoiceText(voiceOpeningText, "opening", () => {
+    void speakVoiceText(voiceOpeningText, "opening", () => {
       if (voiceSessionActiveRef.current) {
         void beginVoiceListening()
       }
@@ -740,6 +743,7 @@ function FloatingAgent({ session }: { session: LoginSession }) {
       form.append("file", audio, "portal-voice.wav")
       form.append("sessionId", session.pendingSessionId)
       form.append("channel", "portal-voice")
+      form.append("scenarioId", scenarioId)
       form.append("sampleRate", String(sampleRate))
       const response = await fetch("/api/agent/voice/turn", {
         method: "POST",
@@ -789,8 +793,53 @@ function FloatingAgent({ session }: { session: LoginSession }) {
     voiceAudioContextRef.current = null
   }
 
-  function speakVoiceText(text: string, state: VoiceCaptureState, onDone: () => void) {
+  async function speakVoiceText(text: string, state: VoiceCaptureState, onDone: () => void) {
     const speechText = toSpeechText(text)
+    if (!speechText) {
+      onDone()
+      return
+    }
+
+    stopVoicePlayback()
+    setVoiceStatus(state)
+    try {
+      const response = await fetch("/api/agent/tts/synthesize", {
+        method: "POST",
+        headers: {
+          ...tenantHeaders,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          sessionId: session.pendingSessionId,
+          text: speechText
+        })
+      })
+      if (!response.ok) {
+        throw new Error(await response.text())
+      }
+
+      const audioUrl = URL.createObjectURL(await response.blob())
+      const audio = new Audio(audioUrl)
+      voicePlaybackRef.current = audio
+      voicePlaybackUrlRef.current = audioUrl
+      audio.onended = () => {
+        clearVoicePlayback()
+        onDone()
+      }
+      audio.onerror = () => {
+        clearVoicePlayback()
+        playNativeSpeechText(speechText, state, onDone)
+      }
+      await audio.play()
+      setVoiceError(null)
+    } catch (failure) {
+      clearVoicePlayback()
+      setVoiceError(`Matcha TTS indisponível: ${readError(failure)}`)
+      playNativeSpeechText(speechText, state, onDone)
+    }
+  }
+
+  function playNativeSpeechText(speechText: string, state: VoiceCaptureState, onDone: () => void) {
     if (!("speechSynthesis" in window) || !speechText) {
       onDone()
       return
@@ -808,7 +857,7 @@ function FloatingAgent({ session }: { session: LoginSession }) {
   }
 
   function speakVoiceReply(reply: string, resumeListening = false) {
-    speakVoiceText(reply, "speaking", () => {
+    void speakVoiceText(reply, "speaking", () => {
       if (resumeListening && voiceSessionActiveRef.current) {
         void beginVoiceListening()
         return
@@ -823,8 +872,23 @@ function FloatingAgent({ session }: { session: LoginSession }) {
     voiceSessionActiveRef.current = false
     voiceSendInFlightRef.current = false
     stopVoiceCapture()
-    window.speechSynthesis?.cancel()
+    stopVoicePlayback()
     setVoiceStatus("idle")
+  }
+
+  function stopVoicePlayback() {
+    window.speechSynthesis?.cancel()
+    voicePlaybackRef.current?.pause()
+    clearVoicePlayback()
+  }
+
+  function clearVoicePlayback() {
+    if (voicePlaybackUrlRef.current) {
+      URL.revokeObjectURL(voicePlaybackUrlRef.current)
+    }
+
+    voicePlaybackRef.current = null
+    voicePlaybackUrlRef.current = null
   }
 
   return (
@@ -1099,6 +1163,7 @@ function toSpeechText(text: string) {
     .replace(/^\s*[-*]\s+/gm, "")
     .replace(/^\s*\d+[.)]\s+/gm, "")
     .replace(/[*_~>#]/g, "")
+    .replace(/[^\p{L}\p{N}\s.,;:!?%$€£/()+-]/gu, " ")
     .replace(/\s+/g, " ")
     .trim()
 }

@@ -180,6 +180,13 @@ Dashboard é a primeira seção abaixo do topo e também o primeiro item do menu
 Os gráficos ficam logo abaixo dos cards do Dashboard. A grade mostra Fluxo diário, Banco req/s, Latência e Filas e projeção. Fluxo diário compara créditos e débitos por data. Banco req/s mostra leitura, escrita e total. Latência mostra p50, p95 e p99. Filas e projeção mostra outbox, Rabbit, projetados e duplicados.
 """),
         new(
+            "agent.mcp_runtime",
+            "MCP readonly do portal",
+            ["mcp", "runtime", "dados", "saldo", "creditos", "debitos", "latencia", "filas", "projecoes", "req", "rps", "cliente", "monitoramento"],
+            """
+Quando a pergunta pedir números atuais da tela, o SupportAgent.Api consulta um MCP readonly interno do portal antes de chamar o LLM. Esse MCP lê os mesmos serviços do dashboard: Entries API para créditos, débitos, lançamentos, contas e clientes; Consolidation API para consolidado diário, saldo projetado no read model e lag/outbox; Observability Simulation API para cenário atual, req/s de leitura e escrita, total de banco, p50, p95, p99, erros, filas, projeções, duplicados, error budget, saúde dos componentes e alertas ativos pelas regras padrão. O MCP é somente leitura, não cria lançamento, não altera alerta, não muda cenário e não acessa secrets.
+"""),
+        new(
             "entries.form",
             "Novo lançamento",
             ["lancamento", "lancamentos", "registrar", "credito", "debito", "valor", "data"],
@@ -238,16 +245,16 @@ Swagger não fica no menu lateral. Ele deve ser acessado em /swagger no mesmo do
         new(
             "agent.modes",
             "Agente Vertx",
-            ["agente", "robo", "chat", "conversar", "ligacao", "telefone", "local", "microfone", "voz", "asr"],
+            ["agente", "robo", "chat", "conversar", "ligacao", "telefone", "local", "microfone", "voz", "asr", "tts", "matcha"],
             """
-O Agente Vertx fica fixo no canto inferior direito da tela autenticada. Ao clicar no ícone, aparecem três opções acima dele: Conversar por chat, Conversar local e Conversar por ligação. Conversar por chat chama o SupportAgent.Api, que usa RAG governado e LLM Qwen local em GPU. Conversar local usa o microfone do computador ou celular, grava WAV na taxa nativa do navegador, transcreve com Qwen3-ASR local, ignora áudio vazio, sem nexo ou sem contexto autorizado, consulta o mesmo RAG/LLM governado e reproduz resposta curta em texto plano com a voz nativa do navegador em velocidade 1.8. Conversar por ligação está preparado visualmente; discagem real e provedor telefônico serão definidos depois.
+O Agente Vertx fica fixo no canto inferior direito da tela autenticada. Ao clicar no ícone, aparecem três opções acima dele: Conversar por chat, Conversar local e Conversar por ligação. Conversar por chat chama o SupportAgent.Api, que usa RAG governado, MCP readonly do portal para dados atuais da tela e LLM Qwen local em GPU. Conversar local usa o microfone do computador ou celular, grava WAV na taxa nativa do navegador, transcreve com Qwen3-ASR local, ignora áudio vazio, sem nexo ou sem contexto autorizado, consulta o mesmo RAG/LLM governado e pode usar o MCP readonly quando a fala pedir saldo, créditos, débitos, latência, filas, projeções, req/s ou alertas. A resposta por voz continua curta e em texto plano. A fala principal usa Matcha TTS atual no backend freds-cml-stress-1000, entregue ao navegador como WAV; speechSynthesis do navegador fica apenas como fallback se o Matcha estiver indisponível ou não autorizado. Conversar por ligação está preparado visualmente; discagem real e provedor telefônico serão definidos depois.
 """),
         new(
             "agent.rag_policy",
-            "RAG e política do agente",
-            ["rag", "politica", "policy", "controle", "permitido", "bloqueado", "llm"],
+            "RAG, MCP e política do agente",
+            ["rag", "mcp", "tts", "matcha", "politica", "policy", "controle", "permitido", "bloqueado", "llm"],
             """
-O SupportAgent.Api usa LLM local em GPU, mas não responde livremente. Antes do LLM, a pergunta passa por política de bloqueio contra prompt injection, segredos, tokens, arquivos sensíveis e comandos destrutivos. Depois passa por recuperação RAG sobre documentos curados do portal. Se não houver evidência suficiente, o chat recusa e o modo de voz local ignora silenciosamente. O prompt enviado ao LLM contém apenas o contexto autorizado recuperado. A API retorna fontes internas em campo separado para auditoria e interface. O modo de voz local usa ASR local e a mesma política do chat. O agente não executa ações financeiras nem realiza ligações.
+O SupportAgent.Api usa LLM local em GPU, mas não responde livremente. Antes do LLM, a pergunta passa por política de bloqueio contra prompt injection, segredos, tokens, arquivos sensíveis e comandos destrutivos. Depois passa por recuperação RAG sobre documentos curados do portal. Se a pergunta pedir números atuais da tela, o agente consulta o MCP readonly do portal e adiciona esse snapshot ao prompt junto com o RAG. Se não houver evidência suficiente, o chat recusa e o modo de voz local ignora silenciosamente. O prompt enviado ao LLM contém apenas o contexto autorizado recuperado e, quando aplicável, o snapshot MCP readonly. A API retorna fontes internas em campo separado para auditoria e interface. O modo de voz local usa ASR local, a mesma política do chat e Matcha TTS freds-cml-stress-1000 para fala principal. O agente não executa ações financeiras nem realiza ligações.
 """),
         new(
             "security.enterprise",

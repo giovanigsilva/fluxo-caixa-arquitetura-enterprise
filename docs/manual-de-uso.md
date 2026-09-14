@@ -87,32 +87,47 @@ Ao clicar nele, aparecem tres opcoes acima do simbolo:
 
 - `Conversar por chat`: abre um chat real no portal. O navegador envia a
   conversa para o BFF, que encaminha ao `SupportAgent API`. Esse subagente usa
-  RAG governado e o LLM local em GPU `Qwen/Qwen3.5-35B-A3B-GPTQ-Int4`.
-  As respostas sao maiores e formatadas em blocos/listas. A API retorna fontes
-  internas separadas para auditoria, e a interface mostra nomes amigaveis quando
-  for relevante.
+  RAG governado, MCP readonly do portal e o LLM local em GPU
+  `Qwen/Qwen3.5-35B-A3B-GPTQ-Int4`. As respostas sao maiores e formatadas em
+  blocos/listas. A API retorna fontes internas separadas para auditoria, e a
+  interface mostra nomes amigaveis quando for relevante.
 - `Conversar local`: ativa conversa por microfone no computador ou celular. O
   navegador grava WAV na taxa nativa do dispositivo, envia automaticamente apos
   pausa na fala ao `SupportAgent API`, o subagente transcreve com Qwen3-ASR
   local, ignora audio vazio/sem nexo/sem contexto autorizado, consulta o mesmo
-  RAG/LLM governado e reproduz uma resposta curta em texto plano com a voz
-  nativa do navegador em velocidade 1.8.
+  RAG/LLM governado, usa o MCP readonly quando a fala pede indicadores atuais e
+  reproduz uma resposta curta em texto plano com o Matcha TTS atual
+  `freds-cml-stress-1000`. A voz nativa do navegador fica apenas como fallback
+  caso o Matcha esteja indisponivel ou nao autorizado.
 - `Conversar por ligacao`: abre a tela visual com campo para numero de telefone.
   A discagem real e a escolha do provedor telefonico serao detalhadas depois.
 
 O RAG do agente contem documentos curados sobre login, menu lateral, topo,
 dashboard, graficos, lancamentos, clientes, monitoramento, alertas, teste de
-carga, manual, Swagger, seguranca, cordialidades simples e o proprio agente. Se
-a pergunta nao tiver evidencia nesses documentos, o agente recusa. Ele tambem
-bloqueia prompt injection, pedidos de secrets/tokens, arquivos sensiveis,
-comandos destrutivos e operacoes financeiras automaticas.
+carga, manual, Swagger, seguranca, cordialidades simples, MCP readonly e o
+proprio agente. Se a pergunta nao tiver evidencia nesses documentos, o agente
+recusa. Ele tambem bloqueia prompt injection, pedidos de secrets/tokens,
+arquivos sensiveis, comandos destrutivos e operacoes financeiras automaticas.
+
+Quando a pergunta pede numeros atuais da tela, como saldo projetado, creditos,
+debitos, latencia, filas, projecoes, total de req/s, clientes, saude ou alertas,
+o SupportAgent consulta um MCP readonly interno antes de chamar o LLM. Esse MCP
+le Entries API, Consolidation API e Observability Simulation API usando o tenant
+do usuario e o cenario selecionado no dashboard. O endpoint de auditoria e
+`GET /api/agent/mcp/portal-snapshot?scenarioId=NORMAL`.
+
+Na conversa local, a fala do agente usa `POST /api/agent/tts/synthesize`. O
+SupportAgent envia o texto limpo para o Matcha TTS atual em
+`/research/synthesize`, recebe `audio/L16`, converte para WAV e entrega ao
+navegador. A voz/modelo configurada e `freds-cml-stress-1000`, reaproveitando a
+voz corrente sem expor o Matcha diretamente ao navegador.
 
 Cumprimentos como "oi", "ola", "bom dia", agradecimentos, despedidas e
 perguntas simples sobre quem e o agente sao permitidos para que a conversa fique
 natural. Assuntos fora do portal Vertx continuam bloqueados.
 
-O chat nao cria lancamentos automaticamente e nao chama APIs financeiras sozinho.
-Ele orienta o operador a usar a tela correta.
+O chat nao cria lancamentos automaticamente e nao executa comandos financeiros.
+As chamadas feitas pelo MCP sao somente leitura para enriquecer a resposta.
 
 ## Dashboard
 
@@ -204,7 +219,7 @@ Saude dos componentes:
 - `Redis`: cache/quota planejado/simulado.
 - `Observability`: stack preparada.
 - `AI boundary`: indica o subagente de apoio com RAG governado, LLM local em GPU
-  e voz local por Qwen3-ASR.
+  MCP readonly do portal, voz local por Qwen3-ASR e Matcha TTS para fala.
 
 ## Controle De Alertas
 

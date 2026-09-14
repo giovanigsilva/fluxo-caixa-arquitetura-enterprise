@@ -114,12 +114,15 @@ Senha: Vtx-1d7d875ea260072afc7fa86d</pre>
         <table>
           <thead><tr><th>Opcao</th><th>Funcao nesta etapa</th></tr></thead>
           <tbody>
-            <tr><td>Conversar por chat</td><td>Abre um chat real via BFF e SupportAgent API. O subagente usa RAG governado e LLM local em GPU para responder de forma formatada sobre localizacao, posicao e funcao de login, menu, topo, dashboard, graficos, lancamentos, monitoramento, alertas, teste de carga, clientes, manual, Swagger e agente.</td></tr>
-            <tr><td>Conversar local</td><td>Ativa conversa por microfone no computador ou celular. O navegador grava WAV na taxa nativa do dispositivo, envia automaticamente apos pausa na fala ao SupportAgent API, transcreve com Qwen3-ASR local, ignora audio vazio/sem nexo/sem contexto autorizado, consulta o mesmo RAG/LLM governado e reproduz uma resposta curta em texto plano com a voz nativa do navegador em velocidade 1.8.</td></tr>
+            <tr><td>Conversar por chat</td><td>Abre um chat real via BFF e SupportAgent API. O subagente usa RAG governado, MCP readonly do portal e LLM local em GPU para responder de forma formatada sobre localizacao, posicao e funcao de login, menu, topo, dashboard, graficos, lancamentos, monitoramento, alertas, teste de carga, clientes, manual, Swagger e agente.</td></tr>
+            <tr><td>Conversar local</td><td>Ativa conversa por microfone no computador ou celular. O navegador grava WAV na taxa nativa do dispositivo, envia automaticamente apos pausa na fala ao SupportAgent API, transcreve com Qwen3-ASR local, ignora audio vazio/sem nexo/sem contexto autorizado, consulta o mesmo RAG/LLM governado, usa o MCP readonly quando a fala pede indicadores atuais e reproduz uma resposta curta em texto plano com o Matcha TTS atual <code>freds-cml-stress-1000</code>. A voz nativa do navegador fica apenas como fallback caso o Matcha esteja indisponivel ou nao autorizado.</td></tr>
             <tr><td>Conversar por ligacao</td><td>Mostra campo para informar telefone. A discagem real e o provedor telefonico serao definidos na proxima etapa.</td></tr>
           </tbody>
         </table>
-        <p>O RAG bloqueia respostas sem evidencia, prompt injection, secrets, tokens, arquivos sensiveis, comandos destrutivos e operacoes financeiras automaticas. Cumprimentos, agradecimentos, despedidas e perguntas simples sobre quem e o agente sao permitidos para manter uma conversa natural, mas assuntos fora do portal continuam recusados. O chat nao cria lancamentos automaticamente e nao chama APIs financeiras sozinho.</p>
+        <p>O RAG bloqueia respostas sem evidencia, prompt injection, secrets, tokens, arquivos sensiveis, comandos destrutivos e operacoes financeiras automaticas. Cumprimentos, agradecimentos, despedidas e perguntas simples sobre quem e o agente sao permitidos para manter uma conversa natural, mas assuntos fora do portal continuam recusados.</p>
+        <p>Quando a pergunta pede numeros atuais da tela, como saldo projetado, creditos, debitos, latencia, filas, projecoes, total de req/s, clientes, saude ou alertas, o SupportAgent consulta um MCP readonly interno antes de chamar o LLM. Esse MCP le Entries API, Consolidation API e Observability Simulation API usando o tenant do usuario e o cenario selecionado no dashboard. O endpoint de auditoria e <code>GET /api/agent/mcp/portal-snapshot?scenarioId=NORMAL</code>.</p>
+        <p>Na conversa local, a fala do agente usa <code>POST /api/agent/tts/synthesize</code>. O SupportAgent envia o texto limpo para o Matcha TTS atual em <code>/research/synthesize</code>, recebe <code>audio/L16</code>, converte para WAV e entrega ao navegador. A voz/modelo configurada e <code>freds-cml-stress-1000</code>, reaproveitando a voz corrente sem expor o Matcha diretamente ao navegador.</p>
+        <p>O chat nao cria lancamentos automaticamente e nao executa comandos financeiros. As chamadas feitas pelo MCP sao somente leitura para enriquecer a resposta.</p>
       </section>
 
       <section id="dashboard">
@@ -166,6 +169,7 @@ Senha: Vtx-1d7d875ea260072afc7fa86d</pre>
           <li><code>GET /api/observability/scenarios</code>: cenarios disponiveis.</li>
           <li><code>GET /api/observability/samples</code>: amostra sintetica.</li>
           <li><code>GET /api/observability/stream</code>: stream SSE de amostras.</li>
+          <li><code>GET /api/agent/mcp/portal-snapshot</code>: snapshot readonly usado pelo agente para responder sobre os dados atuais da tela.</li>
         </ul>
       </section>
 
@@ -216,6 +220,7 @@ Content-Type: application/json</pre>
           <li>Containers nao-root, filesystem read-only, <code>no-new-privileges</code> e <code>cap_drop: ALL</code>.</li>
           <li>Idempotencia em lancamentos e auditoria basica.</li>
           <li>Outbox antes da consolidacao.</li>
+          <li>MCP readonly do agente para consultar dados da tela sem executar comandos financeiros.</li>
         </ul>
         <p class="warning">O QR Code anti-IA depende de liberacao da Google no reCAPTCHA Fraud Defense. Hoje esta ativo o Google reCAPTCHA v2 checkbox.</p>
       </section>

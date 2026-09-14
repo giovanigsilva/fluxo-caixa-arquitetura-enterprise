@@ -122,6 +122,15 @@ services:
       ASPNETCORE_URLS: http://+:8080
       VERTX_AGENT_LLM_BASE_URL: http://qwen3-llm-realtime-test:8000
       VERTX_AGENT_ASR_BASE_URL: http://qwen3-asr-offline-test:8765
+      VERTX_AGENT_TTS_BASE_URL: http://matcha-tts-freds-cml-stress-1000:8101
+      VERTX_AGENT_TTS_ENDPOINT: research/synthesize
+      VERTX_AGENT_TTS_VOICE_ID: freds-cml-stress-1000
+      VERTX_AGENT_TTS_TIMEOUT_SECONDS: "45"
+      VERTX_AGENT_ENTRIES_BASE_URL: http://entries-api:8080
+      VERTX_AGENT_CONSOLIDATION_BASE_URL: http://consolidation-api:8080
+      VERTX_AGENT_OBSERVABILITY_BASE_URL: http://observability-api:8080
+      VERTX_AGENT_MCP_ENVIRONMENT: uat
+      VERTX_AGENT_MCP_TIMEOUT_SECONDS: "5"
       VERTX_AGENT_LLM_MODEL: Qwen/Qwen3.5-35B-A3B-GPTQ-Int4
       VERTX_AGENT_LLM_TIMEOUT_SECONDS: "45"
       VERTX_AGENT_ASR_TIMEOUT_SECONDS: "60"
@@ -129,8 +138,9 @@ services:
       VERTX_AGENT_LLM_TEMPERATURE: "0.15"
       VERTX_AGENT_RAG_MIN_SCORE: "2.0"
     networks:
-      - app
-      - support-llm
+      app:
+      support-llm:
+        ipv4_address: 10.254.240.10
 
   outbox-relay:
     <<: *dotnet-service

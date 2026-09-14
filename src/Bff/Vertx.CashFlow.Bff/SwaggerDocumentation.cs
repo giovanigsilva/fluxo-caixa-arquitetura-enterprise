@@ -206,7 +206,7 @@ internal static class SwaggerDocumentation
         "tags": ["Support agent"],
         "operationId": "chatWithSupportAgent",
         "summary": "Conversa com o subagente",
-        "description": "Encaminha a conversa para o SupportAgent.Api. O subagente usa RAG governado antes de chamar o LLM local em GPU e só responde com base em documentos internos recuperados.",
+        "description": "Encaminha a conversa para o SupportAgent.Api. O subagente usa RAG governado antes de chamar o LLM local em GPU. Quando a pergunta pede dados atuais da tela, ele consulta o MCP readonly do portal para saldo, créditos, débitos, consolidado, latência, filas, projeções, req/s, saúde e alertas.",
         "parameters": [
           { "$ref": "#/components/parameters/TenantIdHeader" },
           { "$ref": "#/components/parameters/UserIdHeader" }
@@ -219,8 +219,9 @@ internal static class SwaggerDocumentation
               "example": {
                 "sessionId": "ps_00000000000000000000000000000000",
                 "channel": "portal-chat",
+                "scenarioId": "NORMAL",
                 "messages": [
-                  { "role": "user", "text": "Onde fica o novo lançamento?" }
+                  { "role": "user", "text": "Como está o saldo projetado, créditos, débitos, latência, filas e total de req/s da tela?" }
                 ]
               }
             }
@@ -233,12 +234,75 @@ internal static class SwaggerDocumentation
         }
       }
     },
+    "/api/agent/mcp/portal-snapshot": {
+      "get": {
+        "tags": ["Support agent"],
+        "operationId": "getPortalMcpSnapshot",
+        "summary": "Consulta MCP readonly do portal",
+        "description": "Retorna o snapshot readonly usado pelo agente para responder perguntas sobre os dados atuais da tela. O MCP consolida Entries API, Consolidation API e Observability Simulation API sem executar ações financeiras.",
+        "parameters": [
+          { "$ref": "#/components/parameters/TenantIdHeader" },
+          { "$ref": "#/components/parameters/UserIdHeader" },
+          {
+            "name": "scenarioId",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string", "example": "NORMAL" },
+            "description": "Cenário de monitoramento selecionado no dashboard."
+          }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/PortalMcpSnapshotResponse" }
+        }
+      }
+    },
+    "/api/agent/tts/synthesize": {
+      "post": {
+        "tags": ["Support agent"],
+        "operationId": "synthesizeSupportAgentSpeech",
+        "summary": "Sintetiza voz do agente com Matcha TTS",
+        "description": "Encaminha texto limpo para o Matcha TTS atual do backend freds-cml-stress-1000 e retorna áudio WAV tocável pelo navegador. É usado pela conversa local do portal como caminho principal de fala; a voz nativa do navegador fica apenas como fallback de resiliência.",
+        "parameters": [
+          { "$ref": "#/components/parameters/TenantIdHeader" },
+          { "$ref": "#/components/parameters/UserIdHeader" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/AgentTtsRequest" },
+              "example": {
+                "sessionId": "ps_00000000000000000000000000000000",
+                "text": "Olá seja bem vindo, em que posso te ajudar?"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Áudio WAV PCM 16-bit mono gerado pelo Matcha TTS.",
+            "headers": {
+              "X-Audio-Sample-Rate": { "schema": { "type": "integer", "example": 16000 } },
+              "X-Matcha-Voice-Id": { "schema": { "type": "string", "example": "freds-cml-stress-1000" } },
+              "X-Matcha-Pcm-Bytes": { "schema": { "type": "integer", "example": 96000 } }
+            },
+            "content": {
+              "audio/wav": {
+                "schema": { "type": "string", "format": "binary" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
     "/api/agent/voice/turn": {
       "post": {
         "tags": ["Support agent"],
         "operationId": "talkWithSupportAgentByVoice",
         "summary": "Conversa local por microfone",
-        "description": "Recebe um WAV capturado pelo navegador em multipart/form-data, transcreve no ASR local Qwen3-ASR e responde com o mesmo RAG/LLM governado do SupportAgent.Api. Áudio vazio, sem nexo ou sem contexto autorizado retorna voice-ignored/asr-empty sem fala no portal. A reprodução de voz usa speechSynthesis do navegador.",
+        "description": "Recebe um WAV capturado pelo navegador em multipart/form-data, transcreve no ASR local Qwen3-ASR e responde com o mesmo RAG/LLM governado do SupportAgent.Api. Quando a fala pede indicadores atuais, consulta o MCP readonly do portal e responde de forma curta. Áudio vazio, sem nexo ou sem contexto autorizado retorna voice-ignored/asr-empty sem fala no portal. A reprodução de voz usa Matcha TTS no backend freds-cml-stress-1000 como caminho principal e speechSynthesis do navegador apenas como fallback.",
         "parameters": [
           { "$ref": "#/components/parameters/TenantIdHeader" },
           { "$ref": "#/components/parameters/UserIdHeader" }
@@ -949,19 +1013,28 @@ internal static class SwaggerDocumentation
         }
       },
       "AgentChatResponse": {
-        "description": "Resposta do subagente com modo de execução e fontes RAG.",
+        "description": "Resposta do subagente com modo de execução e fontes RAG/MCP.",
         "content": {
           "application/json": {
             "schema": { "$ref": "#/components/schemas/AgentChatResponse" },
             "example": {
-              "reply": "Novo lançamento fica abaixo dos gráficos, no painel da esquerda.",
+              "reply": "Saldo projetado: R$ 120.000,00. Créditos: R$ 180.000,00. Débitos: R$ 60.000,00. Banco: 40 req/s.",
               "model": "Qwen/Qwen3.5-35B-A3B-GPTQ-Int4",
-              "mode": "rag-grounded-llm",
+              "mode": "rag-mcp-grounded-llm",
               "citations": [
-                { "id": "entries.form", "title": "Novo lançamento" }
+                { "id": "dashboard.metrics", "title": "Dashboard e cards executivos" },
+                { "id": "agent.mcp_runtime", "title": "MCP readonly do portal" }
               ],
               "refusalReason": null
             }
+          }
+        }
+      },
+      "PortalMcpSnapshotResponse": {
+        "description": "Snapshot readonly dos dados financeiros e operacionais atuais do portal usado pelo agente.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/PortalMcpSnapshot" }
           }
         }
       },
@@ -1205,6 +1278,7 @@ internal static class SwaggerDocumentation
         "properties": {
           "sessionId": { "type": "string", "nullable": true, "example": "ps_00000000000000000000000000000000" },
           "channel": { "type": "string", "enum": ["portal-chat", "portal-voice", "telephony-support"], "example": "portal-chat" },
+          "scenarioId": { "type": "string", "nullable": true, "description": "Cenário atual do dashboard usado pelo MCP readonly quando a pergunta pede métricas da tela.", "example": "NORMAL" },
           "messages": {
             "type": "array",
             "minItems": 1,
@@ -1221,13 +1295,21 @@ internal static class SwaggerDocumentation
           "text": { "type": "string", "minLength": 1, "maxLength": 2000, "example": "Onde fica o Dashboard?" }
         }
       },
+      "AgentTtsRequest": {
+        "type": "object",
+        "required": ["text"],
+        "properties": {
+          "sessionId": { "type": "string", "nullable": true, "example": "ps_00000000000000000000000000000000" },
+          "text": { "type": "string", "minLength": 1, "maxLength": 600, "description": "Texto em português já adequado para fala. O backend remove Markdown, fontes e URLs antes de chamar o Matcha.", "example": "Olá seja bem vindo, em que posso te ajudar?" }
+        }
+      },
       "AgentChatResponse": {
         "type": "object",
         "required": ["reply", "model", "mode", "citations"],
         "properties": {
-          "reply": { "type": "string", "description": "Resposta final gerada pelo LLM local, limitada pelo RAG governado." },
+          "reply": { "type": "string", "description": "Resposta final gerada pelo LLM local, limitada pelo RAG governado e enriquecida pelo MCP readonly quando aplicável." },
           "model": { "type": "string", "example": "Qwen/Qwen3.5-35B-A3B-GPTQ-Int4" },
-          "mode": { "type": "string", "enum": ["rag-grounded-llm", "policy-refusal"], "example": "rag-grounded-llm" },
+          "mode": { "type": "string", "enum": ["rag-grounded-llm", "rag-mcp-grounded-llm", "policy-refusal"], "example": "rag-mcp-grounded-llm" },
           "citations": {
             "type": "array",
             "items": { "$ref": "#/components/schemas/RagCitation" }
@@ -1242,6 +1324,7 @@ internal static class SwaggerDocumentation
           "file": { "type": "string", "format": "binary", "description": "Arquivo WAV mono capturado pelo navegador." },
           "sessionId": { "type": "string", "nullable": true, "example": "ps_00000000000000000000000000000000" },
           "channel": { "type": "string", "enum": ["portal-voice"], "example": "portal-voice" },
+          "scenarioId": { "type": "string", "nullable": true, "description": "Cenário atual do dashboard usado pelo MCP readonly quando a fala pede métricas da tela.", "example": "LOAD_100" },
           "sampleRate": { "type": "integer", "format": "int32", "nullable": true, "description": "Taxa de captura do navegador, normalmente 44100 ou 48000 Hz.", "example": 48000 }
         }
       },
@@ -1250,9 +1333,9 @@ internal static class SwaggerDocumentation
         "required": ["transcript", "reply", "model", "mode", "citations", "asrModel"],
         "properties": {
           "transcript": { "type": "string", "description": "Texto reconhecido pelo ASR local." },
-          "reply": { "type": "string", "description": "Resposta final do agente governada pelo RAG. Pode vir vazia quando o modo for voice-ignored ou asr-empty." },
+          "reply": { "type": "string", "description": "Resposta final do agente governada pelo RAG e, quando aplicável, enriquecida pelo MCP readonly. Pode vir vazia quando o modo for voice-ignored ou asr-empty." },
           "model": { "type": "string", "example": "Qwen/Qwen3.5-35B-A3B-GPTQ-Int4" },
-          "mode": { "type": "string", "enum": ["voice-rag-grounded-llm", "voice-ignored", "policy-refusal", "asr-empty"], "example": "voice-rag-grounded-llm" },
+          "mode": { "type": "string", "enum": ["voice-rag-grounded-llm", "voice-rag-mcp-grounded-llm", "voice-ignored", "policy-refusal", "asr-empty"], "example": "voice-rag-mcp-grounded-llm" },
           "citations": {
             "type": "array",
             "items": { "$ref": "#/components/schemas/RagCitation" }
@@ -1262,6 +1345,74 @@ internal static class SwaggerDocumentation
           "language": { "type": "string", "nullable": true, "example": "Portuguese" },
           "asrLatencyMs": { "type": "number", "format": "double", "nullable": true, "example": 180.4 },
           "inputSampleRate": { "type": "integer", "format": "int32", "nullable": true, "example": 48000 }
+        }
+      },
+      "PortalMcpSnapshot": {
+        "type": "object",
+        "required": ["available", "dataSource", "environment", "scenarioId", "generatedAt", "tenantId", "userId", "accountCount", "customerCount", "entryCount", "credits", "debits", "projectedBalance", "dailyRows", "consolidatedCredits", "consolidatedDebits", "consolidatedNetMovement", "consolidatedEntryCount", "readModelOutboxPending", "metrics", "health", "activeAlerts"],
+        "properties": {
+          "available": { "type": "boolean", "description": "Indica se a consulta MCP retornou os serviços internos com sucesso.", "example": true },
+          "dataSource": { "type": "string", "example": "portal-mcp-readonly" },
+          "environment": { "type": "string", "example": "uat" },
+          "scenarioId": { "type": "string", "description": "Cenário de observabilidade usado no snapshot.", "example": "NORMAL" },
+          "generatedAt": { "type": "string", "format": "date-time" },
+          "tenantId": { "type": "string", "example": "org-alpha" },
+          "userId": { "type": "string", "example": "user-admin-alpha" },
+          "accountCount": { "type": "integer", "format": "int32", "example": 2 },
+          "customerCount": { "type": "integer", "format": "int32", "example": 3 },
+          "entryCount": { "type": "integer", "format": "int32", "example": 8 },
+          "credits": { "type": "number", "format": "decimal", "example": 180000 },
+          "debits": { "type": "number", "format": "decimal", "example": 60000 },
+          "projectedBalance": { "type": "number", "format": "decimal", "example": 120000 },
+          "dailyRows": { "type": "integer", "format": "int32", "description": "Quantidade de linhas do consolidado diário projetado.", "example": 5 },
+          "consolidatedCredits": { "type": "number", "format": "decimal", "example": 180000 },
+          "consolidatedDebits": { "type": "number", "format": "decimal", "example": 60000 },
+          "consolidatedNetMovement": { "type": "number", "format": "decimal", "example": 120000 },
+          "consolidatedEntryCount": { "type": "integer", "format": "int32", "example": 8 },
+          "readModelOutboxPending": { "type": "integer", "format": "int32", "example": 0 },
+          "readModelOldestPendingOccurredAt": { "type": "string", "format": "date-time", "nullable": true },
+          "metrics": { "$ref": "#/components/schemas/PortalMcpMetrics" },
+          "health": {
+            "type": "object",
+            "additionalProperties": { "type": "string" },
+            "description": "Saúde dos componentes exibidos no dashboard."
+          },
+          "activeAlerts": {
+            "type": "array",
+            "description": "Alertas disparados pelas regras padrão do dashboard.",
+            "items": { "$ref": "#/components/schemas/PortalMcpAlert" }
+          },
+          "failureReason": { "type": "string", "nullable": true, "description": "Motivo quando available=false." }
+        }
+      },
+      "PortalMcpMetrics": {
+        "type": "object",
+        "required": ["readRps", "writeRps", "p50Ms", "p95Ms", "p99Ms", "errors4xx", "errors5xx", "errors429", "outboxPending", "rabbitReady", "projectedEntries", "duplicatesIgnored"],
+        "properties": {
+          "readRps": { "type": "number", "format": "double", "example": 30 },
+          "writeRps": { "type": "number", "format": "double", "example": 10 },
+          "p50Ms": { "type": "number", "format": "double", "example": 82 },
+          "p95Ms": { "type": "number", "format": "double", "example": 160 },
+          "p99Ms": { "type": "number", "format": "double", "example": 240 },
+          "errors4xx": { "type": "integer", "format": "int32", "example": 1 },
+          "errors5xx": { "type": "integer", "format": "int32", "example": 0 },
+          "errors429": { "type": "integer", "format": "int32", "example": 0 },
+          "outboxPending": { "type": "integer", "format": "int32", "example": 8 },
+          "rabbitReady": { "type": "integer", "format": "int32", "example": 4 },
+          "projectedEntries": { "type": "integer", "format": "int32", "example": 125 },
+          "duplicatesIgnored": { "type": "integer", "format": "int32", "example": 0 },
+          "errorBudgetRemaining": { "type": "number", "format": "double", "nullable": true, "example": 0.82 },
+          "unit": { "type": "string", "nullable": true, "example": "requests" }
+        }
+      },
+      "PortalMcpAlert": {
+        "type": "object",
+        "required": ["label", "severity", "value", "threshold"],
+        "properties": {
+          "label": { "type": "string", "example": "Latência p95" },
+          "severity": { "type": "string", "enum": ["warning", "critical"], "example": "warning" },
+          "value": { "type": "string", "example": "230 ms" },
+          "threshold": { "type": "string", "example": ">= 220 ms" }
         }
       },
       "RagCitation": {
