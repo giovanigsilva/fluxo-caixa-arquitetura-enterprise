@@ -27,6 +27,8 @@ services:
     <<: *dotnet-service
     container_name: teste-pratico-bff
     command: ["dotnet", "Vertx.CashFlow.Bff.dll"]
+    env_file:
+      - ../../.secrets/uat/bff.env
     volumes:
       - ../../.runtime/publish/bff:/app:ro
       - ../../.runtime/uat:/runtime

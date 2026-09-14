@@ -111,6 +111,17 @@ Prepare secrets locais e diretórios de runtime:
 ./scripts/bootstrap.sh --env uat
 ```
 
+Esse passo também gera a credencial local do BFF em arquivos ignorados pelo Git:
+
+```text
+.secrets/uat/login.txt
+.secrets/uat/bff.env
+```
+
+Use o login indicado em `.secrets/uat/login.txt` na tela inicial. Depois da
+senha, escaneie o QR Code em um aplicativo compatível com Google Authenticator
+e informe o código TOTP de 6 dígitos.
+
 Compile backend, publique os serviços .NET em `.runtime/publish` e gere o build
 do frontend:
 
@@ -132,6 +143,7 @@ URLs locais após a subida:
 
 - Frontend: <http://127.0.0.1:6230>
 - BFF/API: <http://127.0.0.1:6210>
+- Swagger UI: <http://127.0.0.1:6210/swagger>
 - OpenAPI BFF: <http://127.0.0.1:6210/openapi/v1.json>
 - Health: <http://127.0.0.1:6210/health/ready>
 
@@ -183,6 +195,8 @@ Health e documentação:
 
 - `GET /health/live`
 - `GET /health/ready`
+- `GET /swagger`
+- `GET /swagger/index.html`
 - `GET /openapi/v1.json`
 
 Entries:
@@ -360,7 +374,15 @@ Secrets gerados pelo bootstrap:
 .secrets/{env}/postgres_write_password
 .secrets/{env}/postgres_read_password
 .secrets/{env}/postgres_platform_password
+.secrets/{env}/bootstrap_admin_password
+.secrets/{env}/bff.env
+.secrets/{env}/login.txt
 ```
+
+O arquivo `bff.env` expõe ao container somente o login, usuário seed e hash
+SHA-256 da senha. O valor de uso em texto claro fica apenas em `login.txt`; o
+`bootstrap_admin_password` é material local de derivação. Ambos são ignorados
+pelo Git.
 
 Não coloque tokens, senhas, certificados privados ou arquivos `.env` reais no
 Git. O repositório foi estruturado para operar com secrets locais ignorados.
@@ -372,6 +394,11 @@ Os domínios planejados são:
 - `https://vertx.dwilon.com`
 - `https://uat.vertx.dwilon.com`
 
+Links públicos de documentação:
+
+- Swagger UI: `https://vertx.dwilon.com/swagger`
+- OpenAPI JSON: `https://vertx.dwilon.com/openapi/v1.json`
+
 As rotas Cloudflare/Tunnel são configuração operacional externa e não ficam neste
 repositório. Para publicar em um ambiente próprio, a recomendação é:
 
@@ -379,7 +406,7 @@ repositório. Para publicar em um ambiente próprio, a recomendação é:
 2. Validar `http://127.0.0.1:6210/health/ready`.
 3. Criar CNAME proxied no Cloudflare apontando para o tunnel.
 4. Configurar ingress do tunnel:
-   - `/api*`, `/bff*`, `/health*`, `/openapi*` para o BFF.
+   - `/api*`, `/bff*`, `/health*`, `/openapi*`, `/swagger*` para o BFF.
    - demais caminhos para o frontend.
 5. Validar por HTTPS público.
 

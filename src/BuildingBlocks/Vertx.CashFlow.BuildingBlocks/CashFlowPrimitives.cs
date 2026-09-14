@@ -245,6 +245,7 @@ public sealed class LoginApprovalChallenge
     public required string PendingSessionId { get; set; }
     public required string SecretHash { get; set; }
     public required string MatchCode { get; set; }
+    public string? TotpSecretBase32 { get; set; }
     public DateTimeOffset ExpiresAt { get; set; }
     public DateTimeOffset? ApprovedAt { get; set; }
     public DateTimeOffset? DeniedAt { get; set; }

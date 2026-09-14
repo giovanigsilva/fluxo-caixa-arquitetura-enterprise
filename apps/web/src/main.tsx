@@ -1,8 +1,9 @@
-import React from "react"
+import React, { FormEvent, useEffect, useState } from "react"
 import { createRoot } from "react-dom/client"
 import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import QRCode from "qrcode"
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
-import { Activity, Banknote, Building2, CircleDollarSign, Download, FileText, Gauge, LayoutDashboard, RefreshCw, ShieldCheck, Users } from "lucide-react"
+import { Activity, Banknote, Building2, CircleDollarSign, Download, FileText, Gauge, KeyRound, LayoutDashboard, LogIn, QrCode, RefreshCw, ShieldCheck, Smartphone, Users } from "lucide-react"
 import "./styles.css"
 
 type Account = { id: string; name: string; currency: string }
@@ -10,11 +11,15 @@ type Customer = { id: string; legalName: string; tradeName?: string; version: nu
 type Entry = { id: string; accountId: string; type: "Credit" | "Debit"; amount: string; businessDate: string; description: string; reversalEntryId?: string }
 type DailyResponse = { lag: { outboxPending: number }, rows: Array<{ businessDate: string; credits: number; debits: number; dayMovement: number; entryCount: number }> }
 type ScenarioSample = { timestamp: string; scenarioId: string; metrics: { readRps: number; writeRps: number; p50Ms: number; p95Ms: number; p99Ms: number; outboxPending: number; rabbitReady: number; projectedEntries: number; errorBudgetRemaining: number | null } }
+type LoginStartResponse = { challengeId: string; pendingSessionId: string; matchCode: string; approvalUrl: string; totpUri: string; totpIssuer: string; displayName: string; expiresAt: string }
+type LoginApproveResponse = { status: "approved"; pendingSessionId: string; userId: string; displayName: string; expiresAt: string }
+type LoginSession = { pendingSessionId: string; userId: string; displayName: string; expiresAt: string }
 
 const queryClient = new QueryClient()
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" })
 const tenantHeaders = { "X-Tenant-Id": "org-alpha", "X-User-Id": "user-admin-alpha" }
 const environmentName = window.location.hostname === "vertx.dwilon.com" ? "Produção" : "UAT"
+const sessionStorageKey = "vertx.cashflow.session"
 
 function request<T>(path: string, init?: RequestInit): Promise<T> {
   return fetch(path, {
@@ -33,14 +38,189 @@ function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 function App() {
+  const [session, setSession] = useState<LoginSession | null>(() => readStoredSession())
+
+  function authenticate(nextSession: LoginSession) {
+    window.sessionStorage.setItem(sessionStorageKey, JSON.stringify(nextSession))
+    setSession(nextSession)
+  }
+
+  function logout() {
+    window.sessionStorage.removeItem(sessionStorageKey)
+    queryClient.clear()
+    setSession(null)
+  }
+
   return (
     <QueryClientProvider client={queryClient}>
-      <Shell />
+      {session ? <Shell session={session} onLogout={logout} /> : <LoginScreen onAuthenticated={authenticate} />}
     </QueryClientProvider>
   )
 }
 
-function Shell() {
+function readStoredSession(): LoginSession | null {
+  try {
+    const raw = window.sessionStorage.getItem(sessionStorageKey)
+    if (!raw) {
+      return null
+    }
+
+    const parsed = JSON.parse(raw) as LoginSession
+    return new Date(parsed.expiresAt).getTime() > Date.now() ? parsed : null
+  } catch {
+    window.sessionStorage.removeItem(sessionStorageKey)
+    return null
+  }
+}
+
+function LoginScreen({ onAuthenticated }: { onAuthenticated: (session: LoginSession) => void }) {
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [totpCode, setTotpCode] = useState("")
+  const [challenge, setChallenge] = useState<LoginStartResponse | null>(null)
+  const [qrDataUrl, setQrDataUrl] = useState("")
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!challenge) {
+      setQrDataUrl("")
+      return
+    }
+
+    let active = true
+    QRCode.toDataURL(challenge.totpUri, {
+      errorCorrectionLevel: "M",
+      margin: 2,
+      width: 236,
+      color: { dark: "#0f172a", light: "#ffffff" }
+    })
+      .then(dataUrl => {
+        if (active) {
+          setQrDataUrl(dataUrl)
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setError("Não foi possível gerar o QR Code.")
+        }
+      })
+
+    return () => {
+      active = false
+    }
+  }, [challenge])
+
+  async function startLogin(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setError(null)
+    setTotpCode("")
+
+    try {
+      const nextChallenge = await request<LoginStartResponse>("/bff/login/start", {
+        method: "POST",
+        body: JSON.stringify({ email, password })
+      })
+      setChallenge(nextChallenge)
+    } catch (failure) {
+      setChallenge(null)
+      setError(readError(failure))
+    }
+  }
+
+  async function approveLogin(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!challenge) {
+      return
+    }
+
+    setError(null)
+    try {
+      const approved = await request<LoginApproveResponse>("/bff/login/approve", {
+        method: "POST",
+        body: JSON.stringify({ challengeId: challenge.challengeId, totpCode })
+      })
+      onAuthenticated({
+        pendingSessionId: approved.pendingSessionId,
+        userId: approved.userId,
+        displayName: approved.displayName,
+        expiresAt: approved.expiresAt
+      })
+    } catch (failure) {
+      setError(readError(failure))
+      setChallenge(null)
+      setTotpCode("")
+    }
+  }
+
+  return (
+    <main className="login-shell">
+      <section className="login-panel" aria-labelledby="login-title">
+        <div className="login-brand">
+          <CircleDollarSign size={28} />
+          <div>
+            <span>Fluxo de Caixa</span>
+            <strong>{environmentName}</strong>
+          </div>
+        </div>
+
+        <div className="login-copy">
+          <span className="badge"><ShieldCheck size={16} /> Entrada protegida</span>
+          <h1 id="login-title">Acesso operacional</h1>
+        </div>
+
+        {!challenge ? (
+          <form className="login-form" onSubmit={startLogin}>
+            <label className="field">
+              <span>Login</span>
+              <input value={email} onChange={event => setEmail(event.target.value)} type="email" autoComplete="username" required />
+            </label>
+            <label className="field">
+              <span>Senha</span>
+              <input value={password} onChange={event => setPassword(event.target.value)} type="password" autoComplete="current-password" required />
+            </label>
+            <button type="submit">
+              <LogIn size={18} /> Entrar
+            </button>
+          </form>
+        ) : (
+          <form className="login-form" onSubmit={approveLogin}>
+            <div className="qr-zone">
+              <div className="qr-frame">
+                {qrDataUrl ? <img src={qrDataUrl} alt="QR Code TOTP" /> : <QrCode size={64} />}
+              </div>
+              <div className="qr-meta">
+                <span><Smartphone size={16} /> {challenge.totpIssuer}</span>
+                <strong>{challenge.displayName}</strong>
+              </div>
+            </div>
+            <label className="field">
+              <span>Código do Google Authenticator</span>
+              <input value={totpCode} onChange={event => setTotpCode(event.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" pattern="[0-9]{6}" autoComplete="one-time-code" required />
+            </label>
+            <button type="submit" disabled={totpCode.length !== 6}>
+              <KeyRound size={18} /> Validar QR
+            </button>
+            <button className="text-button" type="button" onClick={() => setChallenge(null)}>
+              Trocar login
+            </button>
+          </form>
+        )}
+
+        {error && <p className="error">{error}</p>}
+      </section>
+    </main>
+  )
+}
+
+function readError(failure: unknown) {
+  if (failure instanceof Error) {
+    return failure.message || "Operação recusada."
+  }
+
+  return "Operação recusada."
+}
+
+function Shell({ session, onLogout }: { session: LoginSession; onLogout: () => void }) {
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: () => request<Account[]>("/api/entries/accounts") })
   const customers = useQuery({ queryKey: ["customers"], queryFn: () => request<Customer[]>("/api/entries/customers") })
   const entries = useQuery({ queryKey: ["entries"], queryFn: () => request<Entry[]>("/api/entries/entries") })
@@ -68,7 +248,10 @@ function Shell() {
             <span className="crumb">{environmentName} / Organização Alfa</span>
             <h1>Operação financeira</h1>
           </div>
-          <span className="badge"><ShieldCheck size={16} /> Aprovação por celular preparada</span>
+          <div className="topbar-actions">
+            <span className="badge"><ShieldCheck size={16} /> {session.displayName}</span>
+            <button className="ghost-button" type="button" onClick={onLogout}>Sair</button>
+          </div>
         </header>
 
         <section id="dashboard" className="metrics">
