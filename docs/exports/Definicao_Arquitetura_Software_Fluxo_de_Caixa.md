@@ -32,10 +32,14 @@ Entries API continua aceitando writes enquanto houver armazenamento local.
   transações reais, RLS, pooling ou concorrência multi-réplica.
 - Observabilidade real fica preparada, mas desabilitada. Ganho: atende a restrição
   do pedido. Custo: painéis sintéticos não são evidência medida.
-- QR first-party foi implementado sem Keycloak real. Ganho: prova criptográfica do
-  challenge. Custo: falta OIDC/MFA/passkey real antes de produção.
+- Login com senha e Google reCAPTCHA v2 foi implementado sem Keycloak real.
+  Ganho: prova publica de protecao antirrobo na entrada web. Custo: falta
+  OIDC/MFA/passkey real antes de producao e QR Code Fraud Defense depende de
+  liberacao externa da Google.
 
 ## Evidência
 
-Evidências reais ficam em `docs/implementation-status.md` e nos outputs de
-`scripts/build.sh`, `scripts/test.sh`, `scripts/up.sh` e `scripts/smoke.sh`.
+Evidencias reais ficam em `docs/implementation-status.md`,
+`docs/requirements-traceability.md` e nos outputs de `scripts/build.sh`,
+`scripts/test.sh`, `scripts/up.sh`, `scripts/smoke.sh` e
+`docs/testing/k6-consolidated-50rps-2026-09-14.md`.

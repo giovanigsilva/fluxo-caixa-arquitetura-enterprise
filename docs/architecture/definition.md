@@ -41,4 +41,5 @@ Entries API continua aceitando writes enquanto houver armazenamento local.
 
 Evidencias reais ficam em `docs/implementation-status.md`,
 `docs/requirements-traceability.md` e nos outputs de `scripts/build.sh`,
-`scripts/test.sh`, `scripts/up.sh` e `scripts/smoke.sh`.
+`scripts/test.sh`, `scripts/up.sh`, `scripts/smoke.sh` e
+`docs/testing/k6-consolidated-50rps-2026-09-14.md`.

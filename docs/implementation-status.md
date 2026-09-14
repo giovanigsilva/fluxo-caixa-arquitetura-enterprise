@@ -23,6 +23,8 @@ Atualizado em 2026-09-14.
 - BFF/OpenAPI respondeu em `http://127.0.0.1:6210/openapi/v1.json`.
 - Swagger publico respondeu em `https://vertx.dwilon.com/swagger`.
 - Manual publico respondeu em `https://vertx.dwilon.com/manual.html`.
+- Benchmark k6 50 RPS/10 min passou em UAT local com 30.001 requisicoes,
+  0.00% de falhas, p95 807.38 us e p99 1.24 ms.
 - PDF arquitetural inicial gerado em
   `docs/exports/Definicao_Arquitetura_Software_Fluxo_de_Caixa.pdf`.
 
@@ -45,6 +47,5 @@ Atualizado em 2026-09-14.
 - Keycloak real com OIDC Authorization Code + PKCE, MFA/passkey e tema.
 - Vault real inicializado fora de dev mode com AppRole/leases.
 - CSRF/cookies de sessão reais no BFF.
-- E2E Playwright, integração real e k6 50 RPS/10 min.
-- Resultado formal do benchmark k6 anexado em documentacao.
+- E2E Playwright e integração real.
 - DNS/TLS/proxy público para `uat.vertx.dwilon.com`.

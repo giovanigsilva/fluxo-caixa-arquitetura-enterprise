@@ -355,9 +355,9 @@ Se os graficos nao atualizarem:
 
 - O storage validado e file-backed em `.runtime/uat`, nao PostgreSQL produtivo.
 - A telemetria e sintetica e rotulada.
-- O teste de carga do dashboard e simulado; k6 real existe, mas nao foi
-  executado contra o ambiente publico.
+- O teste de carga do dashboard e simulado; o benchmark k6 real de 50 RPS/10 min
+  foi executado na UAT local e documentado em
+  `docs/testing/k6-consolidated-50rps-2026-09-14.md`.
 - O QR Code do Google depende de liberacao externa da Google.
 - O dominio profundo `uat.vertx.dwilon.com` depende de certificado Cloudflare
   compativel para HTTPS publico.
-

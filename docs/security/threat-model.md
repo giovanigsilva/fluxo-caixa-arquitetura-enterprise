@@ -19,4 +19,5 @@
 - Sem Keycloak/OIDC real nesta fatia.
 - Sem RLS e PostgreSQL real nesta fatia.
 - Sem Vault inicializado e auditado.
-- Sem benchmark, E2E e scans.
+- Sem E2E e scans. Benchmark k6 local de 50 RPS foi executado, mas nao substitui
+  ensaio produtivo com banco real e rede publica.

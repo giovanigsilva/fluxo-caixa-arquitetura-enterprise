@@ -58,6 +58,8 @@ inclui:
 - SPA React/Vite em português do Brasil consumindo o BFF.
 - Tela inicial pública com login, senha e Google reCAPTCHA v2 validado no BFF.
 - Swagger/OpenAPI 100% documentado para todas as rotas expostas pelo BFF.
+- Benchmark k6 do consolidado diário validado a 50 RPS por 10 minutos, com
+  0.00% de falhas.
 - Docker Compose para UAT e production.
 - Scripts para bootstrap, build, teste, subida, smoke, status e documentação.
 - Documento de arquitetura exportado em Markdown, HTML e PDF.
@@ -720,8 +722,8 @@ Refazer tudo do zero sem apagar volumes manualmente:
   fluxo reCAPTCHA Enterprise; hoje está ativo o Google reCAPTCHA v2 checkbox.
 - O domínio profundo `uat.vertx.dwilon.com` pode exigir certificado Cloudflare
   avançado/customizado para HTTPS público válido.
-- O script de performance k6 existe, mas benchmark formal não foi executado
-  nesta entrega.
+- O benchmark k6 foi executado na UAT local; para produção real, reexecutar com
+  banco gerenciado, réplicas, rede pública e janela estatística maior.
 - A stack production tem Compose validado, mas deve receber secrets, DNS,
   certificado e banco reais antes de qualquer uso produtivo.
 

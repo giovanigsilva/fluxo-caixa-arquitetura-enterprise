@@ -15,7 +15,7 @@
 </head>
 <body>
   <h1>Definição Arquitetura Software Fluxo de Caixa</h1>
-  <p><strong>Projeto:</strong> Vertx.CashFlow. <strong>Data:</strong> 2026-09-11.</p>
+  <p><strong>Projeto:</strong> Vertx.CashFlow. <strong>Data:</strong> 2026-09-14.</p>
   <h2>Objetivo</h2>
   <p>Sistema B2B para registrar lançamentos financeiros, preservar ledger imutável,
   projetar consolidado diário, gerar extratos e administrar tenants, usuários,
@@ -23,7 +23,7 @@
   <h2>Fatia executável atual</h2>
   <table>
     <tr><th>Componente</th><th>Estado</th></tr>
-    <tr><td>BFF</td><td>Implementado com proxy fixo e challenge first-party parcial.</td></tr>
+    <tr><td>BFF</td><td>Implementado com proxy fixo, login com senha e Google reCAPTCHA v2 validado server-side.</td></tr>
     <tr><td>Entries API</td><td>Implementada com cadastros, lançamentos, estorno, idempotência e outbox local.</td></tr>
     <tr><td>Workers</td><td>Relay, consolidação e relatórios implementados como processos separados.</td></tr>
     <tr><td>SPA</td><td>Implementada em React/Vite, pt-BR, consumindo BFF.</td></tr>
@@ -38,9 +38,10 @@
     <li><code>scripts/build.sh --env uat</code>: build/publish backend e build SPA executados.</li>
     <li><code>scripts/test.sh --env uat</code>: 8 testes passaram e typecheck frontend passou.</li>
     <li><code>scripts/smoke.sh --env uat</code>: validação prática após subir containers.</li>
+    <li><code>tests/performance/consolidated-50rps.k6.js</code>: 30.001 requisições em 10 min, 50.001571/s, 0.00% falhas, p95 807.38 us e p99 1.24 ms.</li>
   </ul>
   <h2>Riscos residuais</h2>
   <p>OIDC/Keycloak, Vault real, PostgreSQL/RabbitMQ/Redis reais, DNS/TLS público,
-  benchmark k6 de 50 RPS, E2E e scans permanecem pendentes antes de produção real.</p>
+  E2E, scans e benchmark produtivo com banco real permanecem pendentes antes de produção real.</p>
 </body>
 </html>
