@@ -1,9 +1,11 @@
+using System.Collections.Concurrent;
 using System.Net.Http.Json;
 using System.Globalization;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading.Channels;
 
 internal sealed record AgentConfiguration(
     string LlmBaseUrl,
@@ -118,12 +120,38 @@ internal sealed record AgentCallStartResponse(
     string Message,
     AgentCallGuideTarget[] GuidedTargets);
 internal sealed record AgentCallGuideTarget(string TargetId, string Label, int DelayMs);
+internal sealed record AgentCallScreenEventRequest(
+    string? CallId,
+    string? SessionId,
+    string? TenantId,
+    string? UserId,
+    string? TargetId,
+    string? Label,
+    string? Source,
+    string? SourceText);
+internal sealed record AgentCallScreenEvent(
+    string Type,
+    string CallId,
+    string TargetId,
+    string Label,
+    string Source,
+    string? SourceText,
+    DateTimeOffset OccurredAt);
 internal sealed record AgentTelephonyHealthResponse(
     bool Enabled,
     string Provider,
     string CallerId,
     string Status,
     string? Detail);
+
+internal enum PortalCallEventPublishStatus
+{
+    Published,
+    NoSubscriber,
+    InvalidRequest,
+    UnknownCall,
+    Forbidden
+}
 
 internal sealed class VllmChatClient(HttpClient httpClient)
 {
@@ -383,8 +411,8 @@ internal sealed class PortalTelephonyClient(HttpClient httpClient, AgentConfigur
             FormatBrazilianPhone(normalizedPhone),
             configuration.TelephonyProvider,
             configuration.TelephonyCallerId,
-            "Chamada solicitada pela Vero. O agente Vertx vai orientar pelo telefone e o portal vai destacar os pontos principais na tela.",
-            PortalCallGuide.DefaultTargets);
+            "Chamada solicitada pela Vero. O agente Vertx vai orientar pelo telefone.",
+            []);
     }
 
     private AgentTelephonyHealthResponse Health(string status, string? detail)
@@ -438,25 +466,275 @@ internal sealed class PortalTelephonyClient(HttpClient httpClient, AgentConfigur
     }
 }
 
-internal static class PortalCallGuide
+internal sealed class PortalCallEventBroker
 {
-    public static AgentCallGuideTarget[] DefaultTargets { get; } =
-    [
-        new("dashboard", "Dashboard executivo", 800),
-        new("metric-credits", "Card de créditos", 3200),
-        new("metric-debits", "Card de débitos", 5600),
-        new("metric-projected-balance", "Saldo projetado", 8000),
-        new("chart-daily-flow", "Fluxo diário", 10400),
-        new("chart-db-rps", "Banco req/s", 12800),
-        new("chart-latency", "Latência", 15200),
-        new("chart-queues", "Filas e projeção", 17600),
-        new("new-entry-panel", "Novo lançamento", 20000),
-        new("loadtest", "Teste de carga", 22400),
-        new("entries", "Lançamentos", 24800),
-        new("monitor", "Monitoramento do sistema", 27200),
-        new("alerts", "Controle de alertas", 29600)
-    ];
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly HashSet<string> AllowedTargetIds = new(StringComparer.Ordinal)
+    {
+        "dashboard",
+        "metric-credits",
+        "metric-debits",
+        "metric-projected-balance",
+        "metric-db-rps",
+        "metric-p95-api",
+        "metric-active-alerts",
+        "chart-daily-flow",
+        "chart-db-rps",
+        "chart-latency",
+        "chart-queues",
+        "new-entry-panel",
+        "loadtest",
+        "entries",
+        "customers",
+        "monitor",
+        "alerts",
+        "portal-sidebar",
+        "portal-topbar",
+        "support-agent-launcher",
+        "manual-nav-link"
+    };
+
+    private readonly ConcurrentDictionary<string, PortalCallSession> sessions = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<Guid, Channel<AgentCallScreenEvent>>> subscribers = new(StringComparer.Ordinal);
+
+    public void RegisterSession(string callId, string? sessionId, string tenantId, string userId)
+    {
+        var normalizedCallId = Normalize(callId);
+        var normalizedSessionId = Normalize(sessionId);
+        var normalizedTenantId = Normalize(tenantId);
+        var normalizedUserId = Normalize(userId);
+        if (normalizedCallId is null || normalizedSessionId is null || normalizedTenantId is null || normalizedUserId is null)
+        {
+            return;
+        }
+
+        CleanupExpiredSessions();
+        sessions[normalizedCallId] = new PortalCallSession(
+            normalizedCallId,
+            normalizedSessionId,
+            normalizedTenantId,
+            normalizedUserId,
+            DateTimeOffset.UtcNow.AddMinutes(10));
+    }
+
+    public bool TryValidateSubscription(
+        string? callId,
+        string? sessionId,
+        string tenantId,
+        string userId,
+        out int statusCode,
+        out string error)
+    {
+        return TryValidateSession(callId, sessionId, tenantId, userId, out statusCode, out error);
+    }
+
+    public PortalCallEventPublishStatus TryPublish(
+        AgentCallScreenEventRequest request,
+        out AgentCallScreenEvent? published,
+        out string? error)
+    {
+        published = null;
+        if (!TryValidateSession(
+                request.CallId,
+                request.SessionId,
+                request.TenantId,
+                request.UserId,
+                out var statusCode,
+                out var validationError))
+        {
+            error = validationError;
+            return statusCode == StatusCodes.Status404NotFound
+                ? PortalCallEventPublishStatus.UnknownCall
+                : statusCode == StatusCodes.Status403Forbidden
+                    ? PortalCallEventPublishStatus.Forbidden
+                    : PortalCallEventPublishStatus.InvalidRequest;
+        }
+
+        var targetId = Normalize(request.TargetId);
+        if (targetId is null || !AllowedTargetIds.Contains(targetId))
+        {
+            error = "Target de orientação visual inválido.";
+            return PortalCallEventPublishStatus.InvalidRequest;
+        }
+
+        var callId = Normalize(request.CallId)!;
+        published = new AgentCallScreenEvent(
+            "portal-focus",
+            callId,
+            targetId,
+            Normalize(request.Label) ?? targetId,
+            Normalize(request.Source) ?? "telephony",
+            string.IsNullOrWhiteSpace(request.SourceText) ? null : request.SourceText.Trim(),
+            DateTimeOffset.UtcNow);
+
+        if (!subscribers.TryGetValue(callId, out var callSubscribers) || callSubscribers.IsEmpty)
+        {
+            error = null;
+            return PortalCallEventPublishStatus.NoSubscriber;
+        }
+
+        foreach (var subscriber in callSubscribers.Values)
+        {
+            subscriber.Writer.TryWrite(published);
+        }
+
+        error = null;
+        return PortalCallEventPublishStatus.Published;
+    }
+
+    public async Task StreamAsync(string callId, HttpResponse response, CancellationToken ct)
+    {
+        var channel = Channel.CreateUnbounded<AgentCallScreenEvent>(new UnboundedChannelOptions
+        {
+            SingleReader = true,
+            SingleWriter = false
+        });
+        var subscriptionId = Guid.NewGuid();
+        var callSubscribers = subscribers.GetOrAdd(callId, _ => new ConcurrentDictionary<Guid, Channel<AgentCallScreenEvent>>());
+        callSubscribers[subscriptionId] = channel;
+
+        try
+        {
+            await response.WriteAsync(": connected\n\n", ct).ConfigureAwait(false);
+            await response.Body.FlushAsync(ct).ConfigureAwait(false);
+
+            while (!ct.IsCancellationRequested)
+            {
+                using var waitCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                var readTask = channel.Reader.WaitToReadAsync(waitCts.Token).AsTask();
+                var keepAliveTask = Task.Delay(TimeSpan.FromSeconds(15), ct);
+                var completed = await Task.WhenAny(readTask, keepAliveTask).ConfigureAwait(false);
+
+                if (completed == keepAliveTask)
+                {
+                    waitCts.Cancel();
+                    try
+                    {
+                        if (await readTask.ConfigureAwait(false))
+                        {
+                            while (channel.Reader.TryRead(out var queuedItem))
+                            {
+                                await WriteEventAsync(response, queuedItem, ct).ConfigureAwait(false);
+                            }
+
+                            continue;
+                        }
+                    }
+                    catch (OperationCanceledException) when (waitCts.IsCancellationRequested)
+                    {
+                    }
+
+                    await response.WriteAsync(": keepalive\n\n", ct).ConfigureAwait(false);
+                    await response.Body.FlushAsync(ct).ConfigureAwait(false);
+                    continue;
+                }
+
+                if (!await readTask.ConfigureAwait(false))
+                {
+                    break;
+                }
+
+                while (channel.Reader.TryRead(out var queuedItem))
+                {
+                    await WriteEventAsync(response, queuedItem, ct).ConfigureAwait(false);
+                }
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+        }
+        finally
+        {
+            callSubscribers.TryRemove(subscriptionId, out _);
+            if (callSubscribers.IsEmpty)
+            {
+                subscribers.TryRemove(callId, out _);
+            }
+        }
+    }
+
+    private static async Task WriteEventAsync(HttpResponse response, AgentCallScreenEvent item, CancellationToken ct)
+    {
+        var json = JsonSerializer.Serialize(item, JsonOptions);
+        await response.WriteAsync($"event: portal-focus\ndata: {json}\n\n", ct).ConfigureAwait(false);
+        await response.Body.FlushAsync(ct).ConfigureAwait(false);
+    }
+
+    private bool TryValidateSession(
+        string? callId,
+        string? sessionId,
+        string? tenantId,
+        string? userId,
+        out int statusCode,
+        out string error)
+    {
+        CleanupExpiredSessions();
+
+        var normalizedCallId = Normalize(callId);
+        var normalizedSessionId = Normalize(sessionId);
+        var normalizedTenantId = Normalize(tenantId);
+        var normalizedUserId = Normalize(userId);
+        if (normalizedCallId is null || normalizedSessionId is null || normalizedTenantId is null || normalizedUserId is null)
+        {
+            statusCode = StatusCodes.Status400BadRequest;
+            error = "callId, sessionId, tenantId e userId são obrigatórios para orientação visual da ligação.";
+            return false;
+        }
+
+        if (!sessions.TryGetValue(normalizedCallId, out var session))
+        {
+            statusCode = StatusCodes.Status404NotFound;
+            error = "Chamada sem sessão visual registrada.";
+            return false;
+        }
+
+        if (session.ExpiresAt <= DateTimeOffset.UtcNow)
+        {
+            sessions.TryRemove(normalizedCallId, out _);
+            statusCode = StatusCodes.Status404NotFound;
+            error = "Sessão visual da chamada expirada.";
+            return false;
+        }
+
+        if (!string.Equals(session.SessionId, normalizedSessionId, StringComparison.Ordinal)
+            || !string.Equals(session.TenantId, normalizedTenantId, StringComparison.Ordinal)
+            || !string.Equals(session.UserId, normalizedUserId, StringComparison.Ordinal))
+        {
+            statusCode = StatusCodes.Status403Forbidden;
+            error = "Evento de ligação não pertence à sessão autenticada.";
+            return false;
+        }
+
+        statusCode = StatusCodes.Status200OK;
+        error = string.Empty;
+        return true;
+    }
+
+    private void CleanupExpiredSessions()
+    {
+        var now = DateTimeOffset.UtcNow;
+        foreach (var session in sessions)
+        {
+            if (session.Value.ExpiresAt <= now)
+            {
+                sessions.TryRemove(session.Key, out _);
+            }
+        }
+    }
+
+    private static string? Normalize(string? value)
+    {
+        var normalized = value?.Trim();
+        return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
+    }
 }
+
+internal sealed record PortalCallSession(
+    string CallId,
+    string SessionId,
+    string TenantId,
+    string UserId,
+    DateTimeOffset ExpiresAt);
 
 internal static class WavPcm16
 {

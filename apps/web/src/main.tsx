@@ -41,6 +41,7 @@ type AgentChatResponse = { reply: string; model: string; mode: string; citations
 type AgentVoiceTurnResponse = { transcript: string; reply: string; model: string; mode: string; citations: AgentCitation[]; refusalReason?: string | null; asrModel: string; language?: string | null; asrLatencyMs?: number | null; inputSampleRate?: number | null }
 type AgentCallGuideTarget = { targetId: string; label: string; delayMs: number }
 type AgentCallStartResponse = { status: string; callId: string; phoneNumber: string; provider: string; callerId: string; message: string; guidedTargets: AgentCallGuideTarget[] }
+type AgentCallScreenEvent = { type: string; callId: string; targetId: string; label: string; source: string; sourceText?: string | null; occurredAt: string }
 type VoiceCaptureState = "idle" | "opening" | "recording" | "processing" | "speaking"
 
 const voiceOpeningText = "Olá seja bem vindo, em que posso te ajudar?"
@@ -95,7 +96,6 @@ const initialAgentMessages: AgentMessage[] = [
   { id: "agent-welcome", role: "agent", text: "Olá, eu sou o agente Vertx. Estou conectado ao subagente com LLM local em GPU, RAG governado e MCP readonly para consultar os dados atuais do portal." }
 ]
 const portalFocusTimers = new Map<string, number>()
-const portalCallGuideTimers: number[] = []
 const portalFocusTargets: Array<{ id: string; citationIds: string[]; terms: string[] }> = [
   { id: "new-entry-panel", citationIds: ["entries.form"], terms: ["novo lancamento", "novo lançamento", "registrar lancamento", "registrar lançamento", "lancamento de debito", "lançamento de débito", "lancamento de credito", "lançamento de crédito", "campo valor", "campo data", "campo descricao", "campo descrição", "campo cliente"] },
   { id: "loadtest", citationIds: ["observability.loadtest"], terms: ["teste de carga", "cenarios sinteticos", "cenários sintéticos", "carga 50", "carga 100", "pico 200", "recuperacao", "recuperação"] },
@@ -579,6 +579,8 @@ function FloatingAgent({ session, scenarioId }: { session: LoginSession; scenari
   const voiceLastSpeechMsRef = useRef(0)
   const voiceCaptureStartMsRef = useRef(0)
   const voiceSendInFlightRef = useRef(false)
+  const callEventsAbortRef = useRef<AbortController | null>(null)
+  const activeCallIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (mode === "chat" && feedRef.current) {
@@ -589,6 +591,7 @@ function FloatingAgent({ session, scenarioId }: { session: LoginSession; scenari
   useEffect(() => () => {
     voiceSessionActiveRef.current = false
     clearPortalCallGuide()
+    stopCallEventStream()
     stopVoiceCapture()
     stopVoicePlayback()
   }, [])
@@ -604,6 +607,7 @@ function FloatingAgent({ session, scenarioId }: { session: LoginSession; scenari
 
   function closeAgent() {
     endVoiceConversation()
+    stopCallEventStream()
     clearPortalCallGuide()
     setMode(null)
     setMenuOpen(false)
@@ -669,6 +673,8 @@ function FloatingAgent({ session, scenarioId }: { session: LoginSession; scenari
     setCallPending(true)
     setCallError(null)
     setCallStatus("Solicitando ligação pela Vero...")
+    stopCallEventStream()
+    clearPortalCallGuide()
     try {
       const answer = await request<AgentCallStartResponse>("/api/agent/call/start", {
         method: "POST",
@@ -678,14 +684,113 @@ function FloatingAgent({ session, scenarioId }: { session: LoginSession; scenari
           scenarioId
         })
       })
-      setCallStatus(`${answer.message} Número: ${answer.phoneNumber}.`)
-      runPortalGuidedTargets(answer.guidedTargets)
+      setCallStatus(`${answer.message} Número: ${answer.phoneNumber}. A tela vai destacar apenas itens citados nesta ligação.`)
+      startCallEventStream(answer.callId)
     } catch (failure) {
+      stopCallEventStream()
       clearPortalCallGuide()
       setCallStatus(null)
       setCallError(readError(failure))
     } finally {
       setCallPending(false)
+    }
+  }
+
+  function startCallEventStream(callId: string) {
+    const normalizedCallId = callId.trim()
+    if (!normalizedCallId) {
+      return
+    }
+
+    stopCallEventStream()
+    const controller = new AbortController()
+    callEventsAbortRef.current = controller
+    activeCallIdRef.current = normalizedCallId
+    void listenToCallEvents(normalizedCallId, controller)
+  }
+
+  function stopCallEventStream() {
+    callEventsAbortRef.current?.abort()
+    callEventsAbortRef.current = null
+    activeCallIdRef.current = null
+  }
+
+  async function listenToCallEvents(callId: string, controller: AbortController) {
+    try {
+      const query = new URLSearchParams({
+        callId,
+        sessionId: session.pendingSessionId
+      })
+      const response = await fetch(`/api/agent/call/events?${query}`, {
+        method: "GET",
+        headers: {
+          ...tenantHeaders,
+          Accept: "text/event-stream"
+        },
+        signal: controller.signal
+      })
+      if (!response.ok) {
+        throw new Error(await response.text())
+      }
+
+      const reader = response.body?.getReader()
+      if (!reader) {
+        throw new Error("Stream de orientação visual indisponível.")
+      }
+
+      const decoder = new TextDecoder()
+      let buffer = ""
+      while (!controller.signal.aborted) {
+        const chunk = await reader.read()
+        if (chunk.done) {
+          break
+        }
+
+        buffer += decoder.decode(chunk.value, { stream: true })
+        let eventEnd = buffer.search(/\r?\n\r?\n/)
+        while (eventEnd >= 0) {
+          const rawEvent = buffer.slice(0, eventEnd)
+          buffer = buffer.slice(eventEnd + (buffer[eventEnd] === "\r" ? 4 : 2))
+          handleCallScreenEvent(rawEvent, callId)
+          eventEnd = buffer.search(/\r?\n\r?\n/)
+        }
+      }
+    } catch (failure) {
+      if (!controller.signal.aborted) {
+        setCallError(`Orientação visual da ligação encerrada: ${readError(failure)}`)
+      }
+    } finally {
+      if (callEventsAbortRef.current === controller) {
+        callEventsAbortRef.current = null
+        activeCallIdRef.current = null
+      }
+    }
+  }
+
+  function handleCallScreenEvent(rawEvent: string, callId: string) {
+    const data = rawEvent
+      .split(/\r?\n/)
+      .filter(line => line.startsWith("data:"))
+      .map(line => line.slice(5).trimStart())
+      .join("\n")
+    if (!data) {
+      return
+    }
+
+    try {
+      const event = JSON.parse(data) as AgentCallScreenEvent
+      if (event.callId !== callId || activeCallIdRef.current !== callId) {
+        return
+      }
+
+      if (!portalFocusTargets.some(target => target.id === event.targetId)) {
+        return
+      }
+
+      window.requestAnimationFrame(() => highlightPortalTarget(event.targetId))
+      setCallStatus(`Agente orientando: ${event.label}.`)
+    } catch {
+      return
     }
   }
 
@@ -1263,21 +1368,12 @@ function focusPortalTargetFromAgentAnswer(query: string, reply: string, citation
   window.requestAnimationFrame(() => highlightPortalTarget(targetId))
 }
 
-function runPortalGuidedTargets(targets: AgentCallGuideTarget[]) {
-  clearPortalCallGuide()
-  targets.forEach(target => {
-    const timer = window.setTimeout(() => highlightPortalTarget(target.targetId), Math.max(0, target.delayMs))
-    portalCallGuideTimers.push(timer)
-  })
-}
-
 function clearPortalCallGuide() {
-  while (portalCallGuideTimers.length) {
-    const timer = portalCallGuideTimers.pop()
-    if (timer) {
-      window.clearTimeout(timer)
-    }
-  }
+  portalFocusTimers.forEach((timer, targetId) => {
+    window.clearTimeout(timer)
+    document.getElementById(targetId)?.classList.remove("portal-focus-flash")
+  })
+  portalFocusTimers.clear()
 }
 
 function resolvePortalFocusTarget(query: string, reply: string, citations?: AgentCitation[]) {

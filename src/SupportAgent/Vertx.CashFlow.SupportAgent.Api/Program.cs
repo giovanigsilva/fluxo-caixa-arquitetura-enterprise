@@ -3,6 +3,7 @@ using System.Text.Json;
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddProblemDetails();
 builder.Services.AddSingleton(AgentConfiguration.FromEnvironment());
+builder.Services.AddSingleton<PortalCallEventBroker>();
 builder.Services.AddSingleton<PortalRagIndex>();
 builder.Services.AddHttpClient<PortalMcpClient>((services, client) =>
 {
@@ -138,6 +139,7 @@ api.MapPost("/call/start", async (
     HttpContext httpContext,
     AgentCallStartRequest request,
     PortalTelephonyClient telephony,
+    PortalCallEventBroker callEvents,
     CancellationToken ct) =>
 {
     if (!PortalTelephonyClient.TryNormalizeBrazilianPhone(request.PhoneNumber, out _, out var phoneError))
@@ -150,11 +152,14 @@ api.MapPost("/call/start", async (
 
     try
     {
+        var tenantId = HeaderOrDefault(httpContext, "X-Tenant-Id", "org-alpha");
+        var userId = HeaderOrDefault(httpContext, "X-User-Id", "user-admin-alpha");
         var result = await telephony.StartSupportCallAsync(
             request,
-            HeaderOrDefault(httpContext, "X-Tenant-Id", "org-alpha"),
-            HeaderOrDefault(httpContext, "X-User-Id", "user-admin-alpha"),
+            tenantId,
+            userId,
             ct).ConfigureAwait(false);
+        callEvents.RegisterSession(result.CallId, request.SessionId, tenantId, userId);
         return Results.Ok(result);
     }
     catch (InvalidOperationException exception)
@@ -174,7 +179,29 @@ api.MapPost("/call/start", async (
         return Results.Problem("Tempo esgotado ao solicitar chamada pela Vero.", statusCode: StatusCodes.Status503ServiceUnavailable);
     }
 })
-.WithSummary("Solicita uma ligação de suporte pelo bridge Vero e retorna o roteiro visual do portal.");
+.WithSummary("Solicita uma ligação de suporte pelo bridge Vero sem disparar roteiro visual automático.");
+
+api.MapGet("/call/events", async (
+    HttpContext httpContext,
+    string? callId,
+    string? sessionId,
+    PortalCallEventBroker callEvents,
+    CancellationToken ct) =>
+{
+    var tenantId = HeaderOrDefault(httpContext, "X-Tenant-Id", "org-alpha");
+    var userId = HeaderOrDefault(httpContext, "X-User-Id", "user-admin-alpha");
+    if (!callEvents.TryValidateSubscription(callId, sessionId, tenantId, userId, out var statusCode, out var error))
+    {
+        return Results.Problem(error, statusCode: statusCode);
+    }
+
+    httpContext.Response.Headers.ContentType = "text/event-stream";
+    httpContext.Response.Headers.CacheControl = "no-store";
+    httpContext.Response.Headers["X-Accel-Buffering"] = "no";
+    await callEvents.StreamAsync(callId!, httpContext.Response, ct).ConfigureAwait(false);
+    return Results.Empty;
+})
+.WithSummary("Abre stream SSE de orientação visual restrito à sessão que iniciou a ligação.");
 
 api.MapPost("/chat", async (
     HttpContext httpContext,
@@ -430,6 +457,40 @@ api.MapPost("/voice/turn", async (
         inputSampleRate));
 })
 .WithSummary("Recebe áudio do navegador, transcreve com ASR local e responde com RAG/LLM governado.");
+
+app.MapPost("/internal/call/events", (
+    AgentCallScreenEventRequest request,
+    PortalCallEventBroker callEvents) =>
+{
+    var result = callEvents.TryPublish(request, out var published, out var error);
+    IResult response = result switch
+    {
+        PortalCallEventPublishStatus.Published => Results.Ok(new
+        {
+            status = "published",
+            targetId = published!.TargetId,
+            callId = published.CallId
+        }),
+        PortalCallEventPublishStatus.NoSubscriber => Results.Ok(new
+        {
+            status = "no_subscriber",
+            targetId = published!.TargetId,
+            callId = published.CallId
+        }),
+        PortalCallEventPublishStatus.UnknownCall => Results.NotFound(new
+        {
+            status = "unknown_call",
+            message = error
+        }),
+        PortalCallEventPublishStatus.Forbidden => Results.Problem(error, statusCode: StatusCodes.Status403Forbidden),
+        _ => Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["event"] = [error ?? "Evento inválido."]
+        })
+    };
+    return response;
+})
+.ExcludeFromDescription();
 
 app.Run();
 

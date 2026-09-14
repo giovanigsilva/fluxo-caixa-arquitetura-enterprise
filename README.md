@@ -331,9 +331,12 @@ O modo `Conversar por ligação` recebe um telefone brasileiro com DDD e chama
 `POST /api/agent/call/start`. O SupportAgent normaliza o número para
 DDD+número, valida formatos com ou sem `+55`, cria um job `portal_support` e
 encaminha para o bridge Vero dedicado em `VERTX_AGENT_TELEPHONY_BASE_URL`. A
-resposta traz também `guidedTargets`, uma sequência de itens que a SPA usa para
-rolar a tela e piscar dashboard, cards, gráficos, Novo lançamento, Teste de
-carga, Lançamentos, Monitoramento e Alertas durante a orientação.
+resposta confirma o job, registra `callId + sessionId + tenant + user` e não
+dispara roteiro visual automático. A aba que solicitou a ligação abre
+`GET /api/agent/call/events` em SSE; o SupportAgent valida a mesma sessão antes
+de entregar qualquer evento. Assim, durante a ligação, só a tela de quem chamou
+o agente recebe rolagem e destaque, e apenas quando o bridge publicar um alvo
+explícito como `new-entry-panel`, `loadtest`, `monitor` ou `alerts`.
 
 No host de telefonia, o bridge isolado fica documentado em
 `/data/projects/Saas de Cobrança/discador-perfeito-rust/docker-compose.portal-support.yml`.
@@ -344,6 +347,14 @@ Matcha TTS `freds-cml-stress-1000`, normalização de pontuação, filtro de
 backchannel expandido, resposta calorosa e limite de 120 segundos. O fluxo é
 separado dos workers de cobrança, SDR e pesquisa para não
 misturar campanha com suporte do portal.
+
+Para publicar orientação visual, o bridge usa
+`PORTAL_SUPPORT_EVENTS_URL=http://support-agent-api:8080/internal/call/events`.
+Esse endpoint interno não fica no proxy público; ele recebe `callId`,
+`sessionId`, `tenantId`, `userId`, `targetId`, `label` e `sourceText`, valida a
+sessão registrada no start e descarta qualquer alvo fora da allowlist visual do
+portal. O agente SIP também envia `AssistantResponseReady` via SIP `INFO` quando
+termina de decidir a resposta, permitindo que o destaque acompanhe a fala.
 
 Para o Matcha research atual, o acesso é protegido por allowlist de IP interno.
 O compose reserva `10.254.240.10` para o SupportAgent UAT e `10.254.240.98`
@@ -366,8 +377,10 @@ Rotas documentadas no Swagger:
 
 - `GET /api/agent/call/health`: mostra se o bridge Vero está habilitado e
   acessível.
-- `POST /api/agent/call/start`: solicita a ligação e devolve o roteiro visual de
-  destaque.
+- `POST /api/agent/call/start`: solicita a ligação sem iniciar destaque
+  automático da tela.
+- `GET /api/agent/call/events`: stream SSE exclusivo da chamada e sessão que
+  iniciou a ligação; entrega eventos `portal-focus` com um alvo visual por vez.
 
 ## Trade-offs arquiteturais
 

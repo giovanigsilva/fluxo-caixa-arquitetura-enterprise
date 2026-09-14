@@ -338,7 +338,7 @@ internal static class SwaggerDocumentation
         "tags": ["Support agent"],
         "operationId": "startSupportAgentCall",
         "summary": "Solicita ligação com agente pela Vero",
-        "description": "Recebe um telefone brasileiro com DDD, normaliza o número, solicita a chamada no bridge Vero dedicado e retorna o roteiro visual usado pelo portal para rolar e destacar os itens durante a orientação telefônica. O bridge não fixa caller ID na Vero, usa agente SIP dedicado, Matcha TTS freds-cml-stress-1000, normalização de pontuação e política de suporte restrita ao portal.",
+        "description": "Recebe um telefone brasileiro com DDD, normaliza o número e solicita a chamada no bridge Vero dedicado. O start da ligação registra callId + sessionId + tenant + user para permitir orientação visual somente na tela que pediu a ligação, mas não dispara roteiro visual automático. Destaques de tela só acontecem por evento explícito de suporte apontando um item específico. O bridge não fixa caller ID na Vero, usa agente SIP dedicado, Matcha TTS freds-cml-stress-1000, normalização de pontuação e política de suporte restrita ao portal.",
         "parameters": [
           { "$ref": "#/components/parameters/TenantIdHeader" },
           { "$ref": "#/components/parameters/UserIdHeader" }
@@ -361,6 +361,40 @@ internal static class SwaggerDocumentation
           "400": { "$ref": "#/components/responses/BadRequest" },
           "409": { "$ref": "#/components/responses/Conflict" },
           "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/api/agent/call/events": {
+      "get": {
+        "tags": ["Support agent"],
+        "operationId": "streamSupportAgentCallEvents",
+        "summary": "Escuta orientação visual da ligação",
+        "description": "Abre um stream SSE de orientação visual para uma ligação já solicitada. O SupportAgent valida callId, sessionId, X-Tenant-Id e X-User-Id contra a sessão registrada no start, garantindo que apenas a aba/usuário que iniciou a chamada receba rolagem e destaque visual. O stream envia eventos portal-focus com um targetId permitido por vez; comentários keepalive mantêm a conexão aberta.",
+        "parameters": [
+          { "$ref": "#/components/parameters/TenantIdHeader" },
+          { "$ref": "#/components/parameters/UserIdHeader" },
+          {
+            "name": "callId",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Identificador da chamada retornado por POST /api/agent/call/start.",
+            "example": "portal-support-00000000000000000000000000000000"
+          },
+          {
+            "name": "sessionId",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Sessão web autenticada que solicitou a chamada.",
+            "example": "ps_00000000000000000000000000000000"
+          }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/AgentCallScreenEventStream" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
         }
       }
     },
@@ -1118,7 +1152,7 @@ internal static class SwaggerDocumentation
         }
       },
       "AgentCallStartResponse": {
-        "description": "Ligação solicitada e roteiro visual devolvido ao portal.",
+        "description": "Ligação solicitada pelo portal.",
         "content": {
           "application/json": {
             "schema": { "$ref": "#/components/schemas/AgentCallStartResponse" },
@@ -1128,12 +1162,19 @@ internal static class SwaggerDocumentation
               "phoneNumber": "(31) 99999-9999",
               "provider": "vero",
               "callerId": "",
-              "message": "Chamada solicitada pela Vero. O agente Vertx vai orientar pelo telefone e o portal vai destacar os pontos principais na tela.",
-              "guidedTargets": [
-                { "targetId": "dashboard", "label": "Dashboard executivo", "delayMs": 800 },
-                { "targetId": "new-entry-panel", "label": "Novo lançamento", "delayMs": 20000 },
-                { "targetId": "loadtest", "label": "Teste de carga", "delayMs": 22400 }
-              ]
+              "message": "Chamada solicitada pela Vero. O agente Vertx vai orientar pelo telefone.",
+              "guidedTargets": []
+            }
+          }
+        }
+      },
+      "AgentCallScreenEventStream": {
+        "description": "Stream SSE session-scoped com eventos de orientação visual da ligação.",
+        "content": {
+          "text/event-stream": {
+            "schema": {
+              "type": "string",
+              "example": "event: portal-focus\ndata: {\"type\":\"portal-focus\",\"callId\":\"portal-support-00000000000000000000000000000000\",\"targetId\":\"new-entry-panel\",\"label\":\"Novo lançamento\",\"source\":\"telephony\",\"occurredAt\":\"2026-09-14T12:00:00Z\"}\n\n"
             }
           }
         }
@@ -1402,7 +1443,7 @@ internal static class SwaggerDocumentation
           "message": { "type": "string", "description": "Mensagem operacional exibida pelo portal." },
           "guidedTargets": {
             "type": "array",
-            "description": "Sequência de itens que o portal deve rolar e destacar durante a ligação.",
+            "description": "Lista reservada para eventos explícitos de orientação; no start da ligação fica vazia para evitar destaque automático da tela inteira.",
             "items": { "$ref": "#/components/schemas/AgentCallGuideTarget" }
           }
         }
@@ -1413,7 +1454,20 @@ internal static class SwaggerDocumentation
         "properties": {
           "targetId": { "type": "string", "description": "ID DOM do item destacado pelo portal.", "example": "new-entry-panel" },
           "label": { "type": "string", "description": "Nome humano do item.", "example": "Novo lançamento" },
-          "delayMs": { "type": "integer", "format": "int32", "description": "Atraso após a aceitação da chamada para executar o destaque.", "example": 20000 }
+          "delayMs": { "type": "integer", "format": "int32", "description": "Campo legado para roteiros antigos; o fluxo atual de ligação usa SSE session-scoped em /api/agent/call/events.", "example": 0 }
+        }
+      },
+      "AgentCallScreenEvent": {
+        "type": "object",
+        "required": ["type", "callId", "targetId", "label", "source", "occurredAt"],
+        "properties": {
+          "type": { "type": "string", "enum": ["portal-focus"], "example": "portal-focus" },
+          "callId": { "type": "string", "description": "Chamada à qual o evento pertence.", "example": "portal-support-00000000000000000000000000000000" },
+          "targetId": { "type": "string", "description": "ID permitido do elemento que a tela deve rolar e destacar.", "example": "new-entry-panel" },
+          "label": { "type": "string", "description": "Nome humano exibível do item.", "example": "Novo lançamento" },
+          "source": { "type": "string", "description": "Origem interna do evento.", "example": "telephony" },
+          "sourceText": { "type": "string", "nullable": true, "description": "Trecho de fala ou transcrição que motivou o destaque." },
+          "occurredAt": { "type": "string", "format": "date-time" }
         }
       },
       "AgentTelephonyHealthResponse": {
