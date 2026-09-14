@@ -157,7 +157,7 @@ main { padding: 24px; }
 .agent-voice-session { justify-items: center; min-height: 320px; text-align: center; }
 .agent-voice-session strong { color: #0f172a; font-size: 18px; }
 .agent-voice-session span, .agent-call-preview small { color: #64748b; font-size: 13px; font-weight: 700; }
-.agent-voice-actions { display: grid; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+.agent-voice-actions { display: grid; gap: 8px; grid-template-columns: 1fr; width: 100%; }
 .agent-voice-actions button, .agent-call-preview button { justify-content: center; width: 100%; }
 .agent-secondary-button { background: #334155; }
 .agent-pulse { align-items: center; background: #ccfbf1; border: 1px solid #99f6e4; border-radius: 999px; color: #0f766e; display: flex; height: 88px; justify-content: center; width: 88px; }

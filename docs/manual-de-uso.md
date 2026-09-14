@@ -92,9 +92,10 @@ Ao clicar nele, aparecem tres opcoes acima do simbolo:
   internas separadas para auditoria, e a interface mostra nomes amigaveis quando
   for relevante.
 - `Conversar local`: ativa conversa por microfone no computador ou celular. O
-  navegador grava WAV na taxa nativa do dispositivo, envia ao `SupportAgent API`,
-  o subagente transcreve com Qwen3-ASR local, consulta o mesmo RAG/LLM governado
-  e reproduz a resposta com a voz nativa do navegador.
+  navegador grava WAV na taxa nativa do dispositivo, envia automaticamente apos
+  pausa na fala ao `SupportAgent API`, o subagente transcreve com Qwen3-ASR
+  local, consulta o mesmo RAG/LLM governado e reproduz uma resposta curta em
+  texto plano com a voz nativa do navegador.
 - `Conversar por ligacao`: abre a tela visual com campo para numero de telefone.
   A discagem real e a escolha do provedor telefonico serao detalhadas depois.
 

@@ -2,7 +2,7 @@ import React, { FormEvent, useEffect, useRef, useState } from "react"
 import { createRoot } from "react-dom/client"
 import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
-import { Activity, AlertTriangle, Banknote, Bell, Bot, Building2, CheckCircle2, CircleDollarSign, Database, FileText, Gauge, LayoutDashboard, LineChart as LineChartIcon, LogIn, MessageCircle, Mic, Phone, Play, Plus, RefreshCw, Send, Server, ShieldCheck, Square, Users, X, Zap } from "lucide-react"
+import { Activity, AlertTriangle, Banknote, Bell, Bot, Building2, CheckCircle2, CircleDollarSign, Database, FileText, Gauge, LayoutDashboard, LineChart as LineChartIcon, LogIn, MessageCircle, Mic, Phone, Play, Plus, RefreshCw, Send, Server, ShieldCheck, Users, X, Zap } from "lucide-react"
 import "./styles.css"
 
 type Account = { id: string; name: string; currency: string }
@@ -40,7 +40,13 @@ type AgentMessage = { id: string; role: "agent" | "user"; text: string; citation
 type AgentChatResponse = { reply: string; model: string; mode: string; citations: AgentCitation[]; refusalReason?: string | null }
 type AgentVoiceTurnResponse = { transcript: string; reply: string; model: string; mode: string; citations: AgentCitation[]; refusalReason?: string | null; asrModel: string; language?: string | null; asrLatencyMs?: number | null; inputSampleRate?: number | null }
 type AgentVoiceTurn = { id: string; transcript: string; reply: string; citations: AgentCitation[]; sampleRate?: number | null; asrLatencyMs?: number | null }
-type VoiceCaptureState = "idle" | "recording" | "processing" | "speaking"
+type VoiceCaptureState = "idle" | "opening" | "recording" | "processing" | "speaking"
+
+const voiceOpeningText = "Olá seja bem vindo, em que posso te ajudar?"
+const voiceSpeechRate = 1.2
+const voiceSpeechRmsThreshold = 0.018
+const voiceSilenceAutoSendMs = 1000
+const voiceMinCaptureMs = 700
 
 declare global {
   interface Window {
@@ -537,6 +543,12 @@ function FloatingAgent({ session }: { session: LoginSession }) {
   const voiceStreamRef = useRef<MediaStream | null>(null)
   const voiceChunksRef = useRef<Float32Array[]>([])
   const voiceSampleRateRef = useRef<number>(48000)
+  const voiceStateRef = useRef<VoiceCaptureState>("idle")
+  const voiceSessionActiveRef = useRef(false)
+  const voiceHasSpeechRef = useRef(false)
+  const voiceLastSpeechMsRef = useRef(0)
+  const voiceCaptureStartMsRef = useRef(0)
+  const voiceSendInFlightRef = useRef(false)
 
   useEffect(() => {
     if (mode === "chat" && feedRef.current) {
@@ -545,13 +557,29 @@ function FloatingAgent({ session }: { session: LoginSession }) {
   }, [messages, mode])
 
   useEffect(() => () => {
+    voiceSessionActiveRef.current = false
     stopVoiceCapture()
     window.speechSynthesis?.cancel()
   }, [])
 
   function openMode(nextMode: AgentMode) {
+    if (nextMode !== "local") {
+      endVoiceConversation()
+    }
+
     setMode(nextMode)
     setMenuOpen(false)
+  }
+
+  function closeAgent() {
+    endVoiceConversation()
+    setMode(null)
+    setMenuOpen(false)
+  }
+
+  function setVoiceStatus(nextState: VoiceCaptureState) {
+    voiceStateRef.current = nextState
+    setVoiceState(nextState)
   }
 
   async function sendMessage(event: FormEvent<HTMLFormElement>) {
@@ -598,20 +626,41 @@ function FloatingAgent({ session }: { session: LoginSession }) {
     }
   }
 
-  async function startVoiceCapture() {
-    if (voiceState !== "idle") {
+  function startVoiceConversation() {
+    if (voiceStateRef.current !== "idle") {
+      return
+    }
+
+    voiceSessionActiveRef.current = true
+    voiceSendInFlightRef.current = false
+    setVoiceError(null)
+    speakVoiceText(voiceOpeningText, "opening", () => {
+      if (voiceSessionActiveRef.current) {
+        void beginVoiceListening()
+      }
+    })
+  }
+
+  async function beginVoiceListening() {
+    if (!voiceSessionActiveRef.current) {
+      setVoiceStatus("idle")
+      return
+    }
+
+    if (voiceStateRef.current === "recording") {
       return
     }
 
     const AudioContextCtor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
     if (!navigator.mediaDevices?.getUserMedia || !AudioContextCtor) {
       setVoiceError("Este navegador não liberou captura de microfone.")
+      voiceSessionActiveRef.current = false
+      setVoiceStatus("idle")
       return
     }
 
     try {
       setVoiceError(null)
-      window.speechSynthesis?.cancel()
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           autoGainControl: true,
@@ -626,8 +675,27 @@ function FloatingAgent({ session }: { session: LoginSession }) {
       sink.gain.value = 0
       voiceChunksRef.current = []
       voiceSampleRateRef.current = audioContext.sampleRate
+      voiceHasSpeechRef.current = false
+      voiceLastSpeechMsRef.current = 0
+      voiceCaptureStartMsRef.current = performance.now()
+      voiceSendInFlightRef.current = false
       processor.onaudioprocess = event => {
-        voiceChunksRef.current.push(new Float32Array(event.inputBuffer.getChannelData(0)))
+        const chunk = new Float32Array(event.inputBuffer.getChannelData(0))
+        const now = performance.now()
+        voiceChunksRef.current.push(chunk)
+        if (calculateAudioRms(chunk) > voiceSpeechRmsThreshold) {
+          voiceHasSpeechRef.current = true
+          voiceLastSpeechMsRef.current = now
+        }
+
+        if (
+          voiceHasSpeechRef.current
+          && !voiceSendInFlightRef.current
+          && now - voiceLastSpeechMsRef.current >= voiceSilenceAutoSendMs
+          && now - voiceCaptureStartMsRef.current >= voiceMinCaptureMs
+        ) {
+          void stopVoiceCaptureAndSend()
+        }
       }
       source.connect(processor)
       processor.connect(sink)
@@ -637,29 +705,36 @@ function FloatingAgent({ session }: { session: LoginSession }) {
       voiceSourceRef.current = source
       voiceProcessorRef.current = processor
       voiceSinkRef.current = sink
-      setVoiceState("recording")
+      setVoiceStatus("recording")
     } catch (failure) {
       stopVoiceCapture()
+      voiceSessionActiveRef.current = false
       setVoiceError(readError(failure))
-      setVoiceState("idle")
+      setVoiceStatus("idle")
     }
   }
 
   async function stopVoiceCaptureAndSend() {
-    if (voiceState !== "recording") {
+    if (voiceStateRef.current !== "recording" || voiceSendInFlightRef.current) {
       return
     }
 
+    voiceSendInFlightRef.current = true
     const chunks = voiceChunksRef.current
     const sampleRate = voiceSampleRateRef.current
+    const hasSpeech = voiceHasSpeechRef.current
     stopVoiceCapture()
-    if (!chunks.length) {
-      setVoiceError("Não capturei áudio suficiente. Tente falar por alguns segundos.")
-      setVoiceState("idle")
+    if (!chunks.length || !hasSpeech) {
+      voiceSendInFlightRef.current = false
+      if (voiceSessionActiveRef.current) {
+        void beginVoiceListening()
+      } else {
+        setVoiceStatus("idle")
+      }
       return
     }
 
-    setVoiceState("processing")
+    setVoiceStatus("processing")
     setVoiceError(null)
     try {
       const audio = encodeWav(chunks, sampleRate)
@@ -686,10 +761,18 @@ function FloatingAgent({ session }: { session: LoginSession }) {
         sampleRate: turn.inputSampleRate,
         asrLatencyMs: turn.asrLatencyMs
       }])
-      speakVoiceReply(turn.reply)
+      voiceSendInFlightRef.current = false
+      if (!voiceSessionActiveRef.current) {
+        setVoiceStatus("idle")
+        return
+      }
+
+      speakVoiceReply(turn.reply, true)
     } catch (failure) {
+      voiceSendInFlightRef.current = false
+      voiceSessionActiveRef.current = false
       setVoiceError(readError(failure))
-      setVoiceState("idle")
+      setVoiceStatus("idle")
     }
   }
 
@@ -706,26 +789,42 @@ function FloatingAgent({ session }: { session: LoginSession }) {
     voiceAudioContextRef.current = null
   }
 
-  function speakVoiceReply(reply: string) {
-    if (!("speechSynthesis" in window)) {
-      setVoiceState("idle")
+  function speakVoiceText(text: string, state: VoiceCaptureState, onDone: () => void) {
+    const speechText = toSpeechText(text)
+    if (!("speechSynthesis" in window) || !speechText) {
+      onDone()
       return
     }
 
-    const utterance = new SpeechSynthesisUtterance(stripAgentSourceLine(reply))
+    const utterance = new SpeechSynthesisUtterance(speechText)
     utterance.lang = "pt-BR"
-    utterance.rate = 1.2
+    utterance.rate = voiceSpeechRate
     utterance.pitch = 1
-    utterance.onend = () => setVoiceState("idle")
-    utterance.onerror = () => setVoiceState("idle")
+    utterance.onend = onDone
+    utterance.onerror = onDone
     window.speechSynthesis.cancel()
+    setVoiceStatus(state)
     window.speechSynthesis.speak(utterance)
-    setVoiceState("speaking")
   }
 
-  function stopVoiceSpeaking() {
+  function speakVoiceReply(reply: string, resumeListening = false) {
+    speakVoiceText(reply, "speaking", () => {
+      if (resumeListening && voiceSessionActiveRef.current) {
+        void beginVoiceListening()
+        return
+      }
+
+      voiceSessionActiveRef.current = false
+      setVoiceStatus("idle")
+    })
+  }
+
+  function endVoiceConversation() {
+    voiceSessionActiveRef.current = false
+    voiceSendInFlightRef.current = false
+    stopVoiceCapture()
     window.speechSynthesis?.cancel()
-    setVoiceState("idle")
+    setVoiceStatus("idle")
   }
 
   return (
@@ -737,7 +836,7 @@ function FloatingAgent({ session }: { session: LoginSession }) {
               <span><Bot size={18} /> Agente Vertx</span>
               <small>{agentModeLabel(mode)}</small>
             </div>
-            <button aria-label="Fechar agente" className="agent-icon-button" onClick={() => setMode(null)} type="button"><X size={18} /></button>
+            <button aria-label="Fechar agente" className="agent-icon-button" onClick={closeAgent} type="button"><X size={18} /></button>
           </header>
 
           <div className="agent-mode-switch" role="tablist" aria-label="Modo do agente">
@@ -769,21 +868,20 @@ function FloatingAgent({ session }: { session: LoginSession }) {
 
           {mode === "local" && (
             <div className="agent-voice-session">
-              <div className={`agent-pulse ${voiceState === "recording" ? "recording" : ""}`}><Mic size={32} /></div>
+              <div className={`agent-pulse ${voiceState !== "idle" ? "recording" : ""}`}><Mic size={32} /></div>
               <strong>{voiceStatusTitle(voiceState)}</strong>
               <span>{voiceStatusDescription(voiceState, voiceSampleRateRef.current)}</span>
               <div className="agent-voice-actions">
-                {voiceState === "recording" ? (
-                  <button onClick={stopVoiceCaptureAndSend} type="button"><Square size={18} /> Parar e enviar</button>
+                {voiceState === "idle" ? (
+                  <button onClick={startVoiceConversation} type="button"><Mic size={18} /> Falar agora</button>
                 ) : (
-                  <button disabled={voiceState === "processing" || voiceState === "speaking"} onClick={startVoiceCapture} type="button"><Mic size={18} /> Falar agora</button>
+                  <button className="agent-secondary-button" onClick={endVoiceConversation} type="button"><X size={18} /> Encerrar</button>
                 )}
-                {voiceState === "speaking" && <button className="agent-secondary-button" onClick={stopVoiceSpeaking} type="button"><X size={18} /> Parar áudio</button>}
               </div>
               {voiceError && <p className="agent-panel-error">{voiceError}</p>}
               <div className="agent-voice-turns">
                 {voiceTurns.length === 0 ? (
-                  <p>Toque em Falar agora, permita o microfone e faça uma pergunta sobre o portal.</p>
+                  <p>Conexão contínua pronta para atendimento por voz.</p>
                 ) : voiceTurns.slice(-3).map(turn => (
                   <div className="voice-turn" key={turn.id}>
                     <small>Você disse</small>
@@ -818,7 +916,7 @@ function FloatingAgent({ session }: { session: LoginSession }) {
         </div>
       )}
 
-      <button className="agent-launcher" aria-label="Abrir agente Vertx" onClick={() => mode ? setMode(null) : setMenuOpen(open => !open)} type="button">
+      <button className="agent-launcher" aria-label="Abrir agente Vertx" onClick={() => mode ? closeAgent() : setMenuOpen(open => !open)} type="button">
         <Bot size={28} />
         <span>Posso te ajudar?</span>
       </button>
@@ -839,35 +937,43 @@ function agentModeLabel(mode: AgentMode) {
 }
 
 function voiceStatusTitle(state: VoiceCaptureState) {
+  if (state === "opening") {
+    return "Conexão ativa"
+  }
+
   if (state === "recording") {
     return "Ouvindo agora"
   }
 
   if (state === "processing") {
-    return "Pensando na resposta"
+    return "Respondendo"
   }
 
   if (state === "speaking") {
-    return "Respondendo por voz"
+    return "Falando agora"
   }
 
   return "Conversa local"
 }
 
 function voiceStatusDescription(state: VoiceCaptureState, sampleRate: number) {
+  if (state === "opening") {
+    return voiceOpeningText
+  }
+
   if (state === "recording") {
-    return `Capturando áudio em ${integer.format(sampleRate)} Hz.`
+    return `Pode falar. Capturando em ${integer.format(sampleRate)} Hz.`
   }
 
   if (state === "processing") {
-    return "Transcrevendo com ASR local e consultando o agente."
+    return "Transcrevendo e preparando uma resposta curta."
   }
 
   if (state === "speaking") {
-    return "Reproduzindo a resposta no dispositivo."
+    return "Resposta em áudio ativa."
   }
 
-  return "Use o microfone do computador ou celular para falar com o agente."
+  return "Use o microfone do computador ou celular em conversa contínua."
 }
 
 function encodeWav(chunks: Float32Array[], sampleRate: number) {
@@ -912,6 +1018,18 @@ function writeAscii(view: DataView, offset: number, value: string) {
   for (let index = 0; index < value.length; index += 1) {
     view.setUint8(offset + index, value.charCodeAt(index))
   }
+}
+
+function calculateAudioRms(samples: Float32Array) {
+  if (!samples.length) {
+    return 0
+  }
+
+  let total = 0
+  samples.forEach(sample => {
+    total += sample * sample
+  })
+  return Math.sqrt(total / samples.length)
 }
 
 function renderAgentText(text: string) {
@@ -983,6 +1101,19 @@ function stripAgentSourceLine(text: string) {
     .trim()
 
   return cleaned || text
+}
+
+function toSpeechText(text: string) {
+  return stripAgentSourceLine(text)
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
+    .replace(/^\s*[-*]\s+/gm, "")
+    .replace(/^\s*\d+[.)]\s+/gm, "")
+    .replace(/[*_~>#]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
 }
 
 function renderAgentCitations(citations?: AgentCitation[]) {

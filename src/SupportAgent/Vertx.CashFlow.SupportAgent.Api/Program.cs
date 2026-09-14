@@ -195,10 +195,11 @@ api.MapPost("/voice/turn", async (
     }
 
     var messages = request.Messages ?? [];
-    var denied = AgentPolicy.TryDeny(transcript);
-    if (denied is not null)
+    if (AgentPolicy.TryDeny(transcript) is not null)
     {
-        var refusal = AgentChatResponse.Refused(configuration.Model, denied);
+        var refusal = AgentChatResponse.Refused(
+            configuration.Model,
+            "Não posso ajudar com isso. Posso orientar apenas o uso seguro do portal Vertx.");
         return Results.Ok(new AgentVoiceTurnResponse(
             transcript,
             refusal.Reply,
@@ -217,7 +218,7 @@ api.MapPost("/voice/turn", async (
     {
         var refusal = AgentChatResponse.Refused(
             configuration.Model,
-            "Não tenho contexto autorizado no RAG do Vertx para responder isso. Posso ajudar com mapa do portal, lançamentos, dashboard, monitoramento, alertas, teste de carga, manual, Swagger, acesso e agente.");
+            "Não tenho contexto autorizado para isso. Posso ajudar com menu, lançamentos, dashboard, alertas, teste de carga, manual ou Swagger.");
         return Results.Ok(new AgentVoiceTurnResponse(
             transcript,
             refusal.Reply,
