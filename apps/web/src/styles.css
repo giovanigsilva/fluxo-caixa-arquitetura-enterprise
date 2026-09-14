@@ -7,6 +7,7 @@
   font-variant-numeric: tabular-nums;
 }
 
+*, *::before, *::after { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; }
 button { align-items: center; background: #0f766e; border: 0; border-radius: 8px; color: white; cursor: pointer; display: inline-flex; font-weight: 700; gap: 8px; min-height: 42px; padding: 0 14px; }
 button:disabled { cursor: not-allowed; opacity: .6; }
@@ -26,8 +27,8 @@ th { color: #475569; font-size: 12px; text-transform: uppercase; }
 .login-form { display: grid; gap: 14px; }
 .field { display: grid; gap: 7px; }
 .field span { color: #334155; font-size: 13px; font-weight: 800; }
-.field input { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; color: #0f172a; font: inherit; min-height: 44px; padding: 0 12px; width: 100%; }
-.field input:focus { border-color: #0f766e; box-shadow: 0 0 0 3px rgba(20, 184, 166, .22); outline: none; }
+.field input, .field select { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; color: #0f172a; font: inherit; min-height: 44px; padding: 0 12px; width: 100%; }
+.field input:focus, .field select:focus { border-color: #0f766e; box-shadow: 0 0 0 3px rgba(20, 184, 166, .22); outline: none; }
 .recaptcha-box { min-height: 78px; overflow: hidden; }
 .ghost-button { background: transparent; border: 1px solid transparent; color: #0f766e; justify-content: center; }
 .ghost-button:hover, .ghost-button:focus { border-color: #99f6e4; outline: none; }
@@ -54,6 +55,12 @@ main { padding: 24px; }
 .panel { margin-bottom: 16px; padding: 18px; }
 .panel-title { align-items: center; display: flex; font-size: 18px; font-weight: 800; gap: 10px; justify-content: space-between; margin-bottom: 12px; }
 .panel p { color: #475569; line-height: 1.5; }
+.entry-form { display: grid; gap: 14px; }
+.form-grid { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.field.full { grid-column: 1 / -1; }
+.segmented { background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 8px; display: grid; gap: 4px; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 4px; }
+.segment-button { background: transparent; color: #475569; justify-content: center; min-height: 38px; }
+.segment-button.active { background: white; box-shadow: 0 1px 4px rgba(15, 23, 42, .12); color: #0f766e; }
 .money { text-align: right; }
 .pill { border-radius: 999px; display: inline-flex; font-size: 12px; font-weight: 800; padding: 4px 8px; }
 .credit { background: #dcfce7; color: #166534; }
@@ -61,7 +68,8 @@ main { padding: 24px; }
 .grid-list { display: grid; gap: 10px; }
 .row-card { align-items: center; border: 1px solid #e2e8f0; border-radius: 8px; display: flex; justify-content: space-between; padding: 12px; }
 .row-card span { color: #64748b; font-size: 12px; }
-.error { color: #be123c; font-weight: 700; }
+.error, .panel .error { color: #be123c; font-weight: 700; }
+.success, .panel .success { color: #166534; font-weight: 800; }
 
 @media (max-width: 900px) {
   .app-shell { grid-template-columns: 1fr; }
@@ -78,4 +86,5 @@ main { padding: 24px; }
   .login-shell { padding: 14px; }
   .login-panel { padding: 20px; }
   .recaptcha-box { transform: scale(.92); transform-origin: left center; width: 304px; }
+  .form-grid, .segmented { grid-template-columns: 1fr; }
 }

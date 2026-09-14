@@ -2,12 +2,14 @@ import React, { FormEvent, useEffect, useRef, useState } from "react"
 import { createRoot } from "react-dom/client"
 import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
-import { Activity, Banknote, Building2, CircleDollarSign, Download, FileText, Gauge, LayoutDashboard, LogIn, RefreshCw, ShieldCheck, Users } from "lucide-react"
+import { Activity, Banknote, Building2, CircleDollarSign, FileText, Gauge, LayoutDashboard, LogIn, Plus, RefreshCw, ShieldCheck, Users } from "lucide-react"
 import "./styles.css"
 
 type Account = { id: string; name: string; currency: string }
 type Customer = { id: string; legalName: string; tradeName?: string; version: number }
-type Entry = { id: string; accountId: string; type: "Credit" | "Debit"; amount: string; businessDate: string; description: string; reversalEntryId?: string }
+type EntryType = "Credit" | "Debit"
+type Entry = { id: string; accountId: string; type: EntryType; amount: string; businessDate: string; description: string; reversalEntryId?: string }
+type EntryFormPayload = { accountId: string; type: EntryType; amount: string; businessDate: string; description: string; customerId: string | null; categoryId: null; costCenterId: null }
 type DailyResponse = { lag: { outboxPending: number }, rows: Array<{ businessDate: string; credits: number; debits: number; dayMovement: number; entryCount: number }> }
 type ScenarioSample = { timestamp: string; scenarioId: string; metrics: { readRps: number; writeRps: number; p50Ms: number; p95Ms: number; p99Ms: number; outboxPending: number; rabbitReady: number; projectedEntries: number; errorBudgetRemaining: number | null } }
 type RecaptchaConfigResponse = { provider: "google-recaptcha-v2-checkbox"; enabled: boolean; siteKey?: string }
@@ -345,37 +347,149 @@ function Metric({ title, value, icon }: { title: string; value: string; icon: Re
 
 function EntryPanel({ accounts, customers }: { accounts: Account[]; customers: Customer[] }) {
   const client = useQueryClient()
+  const [entryType, setEntryType] = useState<EntryType>("Credit")
+  const [accountId, setAccountId] = useState("")
+  const [customerId, setCustomerId] = useState("")
+  const [amount, setAmount] = useState("")
+  const [businessDate, setBusinessDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [description, setDescription] = useState("")
+  const [formError, setFormError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!accountId && accounts.length) {
+      setAccountId(accounts[0].id)
+    }
+  }, [accountId, accounts])
+
   const mutation = useMutation({
-    mutationFn: () => request<Entry>("/api/entries/entries", {
+    mutationFn: (payload: EntryFormPayload) => request<Entry>("/api/entries/entries", {
       method: "POST",
       headers: { "Idempotency-Key": crypto.randomUUID() },
-      body: JSON.stringify({
-        accountId: accounts[0]?.id,
-        type: "Credit",
-        amount: "150.00",
-        businessDate: new Date().toISOString().slice(0, 10),
-        description: `Recebimento operacional ${environmentName}`,
-        customerId: customers[0]?.id,
-        categoryId: null,
-        costCenterId: null
-      })
+      body: JSON.stringify(payload)
     }),
     onSuccess: async () => {
       await client.invalidateQueries({ queryKey: ["entries"] })
       await client.invalidateQueries({ queryKey: ["daily"] })
+      setAmount("")
+      setDescription("")
+      setFormError(null)
+      setSuccess("Lançamento registrado.")
     }
   })
 
+  function submitEntry(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setSuccess(null)
+    setFormError(null)
+
+    const normalizedAmount = normalizeAmount(amount)
+    if (!accountId) {
+      setFormError("Selecione uma conta.")
+      return
+    }
+
+    if (!normalizedAmount) {
+      setFormError("Informe um valor positivo com até duas casas decimais.")
+      return
+    }
+
+    if (!businessDate) {
+      setFormError("Informe a data do lançamento.")
+      return
+    }
+
+    const cleanDescription = description.trim()
+    if (!cleanDescription) {
+      setFormError("Informe a descrição do lançamento.")
+      return
+    }
+
+    mutation.mutate({
+      accountId,
+      type: entryType,
+      amount: normalizedAmount,
+      businessDate,
+      description: cleanDescription,
+      customerId: customerId || null,
+      categoryId: null,
+      costCenterId: null
+    })
+  }
+
   return (
     <div className="panel">
-      <div className="panel-title">Novo lançamento rápido</div>
-      <p>Cria um crédito real no backend {environmentName} com idempotência e outbox.</p>
-      <button type="button" onClick={() => mutation.mutate()} disabled={!accounts.length || mutation.isPending}>
-        <Download size={18} /> Registrar crédito BRL 150,00
-      </button>
-      {mutation.isError && <p className="error">Falha ao registrar lançamento.</p>}
+      <div className="panel-title">Novo lançamento</div>
+      <form className="entry-form" onSubmit={submitEntry}>
+        <div className="segmented" role="radiogroup" aria-label="Tipo de lançamento">
+          <button aria-pressed={entryType === "Credit"} className={entryType === "Credit" ? "segment-button active" : "segment-button"} type="button" onClick={() => setEntryType("Credit")}>
+            <Banknote size={18} /> Crédito
+          </button>
+          <button aria-pressed={entryType === "Debit"} className={entryType === "Debit" ? "segment-button active" : "segment-button"} type="button" onClick={() => setEntryType("Debit")}>
+            <RefreshCw size={18} /> Débito
+          </button>
+        </div>
+
+        <div className="form-grid">
+          <label className="field full">
+            <span>Conta</span>
+            <select value={accountId} onChange={event => setAccountId(event.target.value)} required>
+              {accounts.map(account => (
+                <option key={account.id} value={account.id}>{account.name} · {account.currency}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className="field">
+            <span>Valor</span>
+            <input value={amount} onChange={event => setAmount(event.target.value)} inputMode="decimal" placeholder="150,00" required />
+          </label>
+
+          <label className="field">
+            <span>Data</span>
+            <input value={businessDate} onChange={event => setBusinessDate(event.target.value)} type="date" required />
+          </label>
+
+          <label className="field full">
+            <span>Descrição</span>
+            <input value={description} onChange={event => setDescription(event.target.value)} placeholder="Ex.: pagamento de fornecedor" required />
+          </label>
+
+          <label className="field full">
+            <span>Cliente</span>
+            <select value={customerId} onChange={event => setCustomerId(event.target.value)}>
+              <option value="">Sem cliente vinculado</option>
+              {customers.map(customer => (
+                <option key={customer.id} value={customer.id}>{customer.tradeName || customer.legalName}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <button type="submit" disabled={!accounts.length || mutation.isPending}>
+          <Plus size={18} /> {mutation.isPending ? "Registrando" : "Registrar lançamento"}
+        </button>
+      </form>
+      {formError && <p className="error">{formError}</p>}
+      {mutation.isError && <p className="error">{readError(mutation.error)}</p>}
+      {success && <p className="success">{success}</p>}
     </div>
   )
+}
+
+function normalizeAmount(raw: string): string | null {
+  const compact = raw.trim().replace(/\s/g, "")
+  if (!compact) {
+    return null
+  }
+
+  const normalized = compact.includes(",") ? compact.replace(/\./g, "").replace(",", ".") : compact
+  if (!/^\d+(\.\d{1,2})?$/.test(normalized)) {
+    return null
+  }
+
+  const value = Number(normalized)
+  return Number.isFinite(value) && value > 0 ? value.toFixed(2) : null
 }
 
 createRoot(document.getElementById("root")!).render(<App />)
