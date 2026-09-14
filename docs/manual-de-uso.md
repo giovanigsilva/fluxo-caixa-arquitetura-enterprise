@@ -51,6 +51,7 @@ O sistema registra e consulta fluxo de caixa multi-tenant. A entrega atual inclu
 - monitoramento sintetico;
 - controle de alertas simulado;
 - teste de carga simulado;
+- agente Vertx flutuante para chat e modos de atendimento visual;
 - Swagger com todas as rotas expostas pelo BFF;
 - health checks;
 - workers de outbox, consolidacao e relatorios.
@@ -77,6 +78,22 @@ O menu lateral organiza a operacao por area:
 - `Teste de carga`: cenarios sinteticos para simular carga e incidentes.
 - `Lancamentos`: lista de movimentacoes financeiras confirmadas.
 - `Clientes`: clientes seed disponiveis para demonstracao.
+
+## Agente Vertx
+
+O simbolo do agente fica fixo no canto inferior esquerdo da tela autenticada.
+Ao clicar nele, aparecem tres opcoes acima do simbolo:
+
+- `Conversar por chat`: abre um chat local dentro do portal. Nesta etapa, o
+  agente responde com orientacoes sobre lancamentos, consolidado, dashboard,
+  alertas, Swagger, acesso e teste de carga.
+- `Conversar local`: abre a tela visual do modo de voz local. A ativacao real de
+  microfone sera detalhada em etapa posterior.
+- `Conversar por ligacao`: abre a tela visual com campo para numero de telefone.
+  A discagem real e a escolha do provedor telefonico serao detalhadas depois.
+
+O chat atual nao cria lancamentos automaticamente e nao chama APIs financeiras
+sozinho. Ele e uma camada de apoio visual/local para orientar a operacao.
 
 ## Dashboard
 

@@ -70,6 +70,8 @@ multi-tenant:
 - Monitoramento sintetico de APIs, banco, filas e error budget.
 - Controle visual de alertas.
 - Menu de teste de carga sintetico.
+- Agente Vertx flutuante com chat local e opcoes visuais para conversa local e
+  ligacao.
 - Swagger/OpenAPI documentado.
 - Scripts de bootstrap, build, teste, smoke, status e subida.
 - Docker Compose para UAT e production.
@@ -132,6 +134,7 @@ O detalhe funcional de cada item esta documentado em
 - monitoramento;
 - controle de alertas;
 - teste de carga;
+- agente Vertx;
 - Swagger;
 - seguranca;
 - QR Code anti-IA e status da liberacao Google;

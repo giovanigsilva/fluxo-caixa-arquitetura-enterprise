@@ -2,7 +2,7 @@ import React, { FormEvent, useEffect, useRef, useState } from "react"
 import { createRoot } from "react-dom/client"
 import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
-import { Activity, AlertTriangle, Banknote, Bell, Building2, CheckCircle2, CircleDollarSign, Database, FileText, Gauge, LayoutDashboard, LineChart as LineChartIcon, LogIn, Play, Plus, RefreshCw, Server, ShieldCheck, Users, Zap } from "lucide-react"
+import { Activity, AlertTriangle, Banknote, Bell, Bot, Building2, CheckCircle2, CircleDollarSign, Database, FileText, Gauge, LayoutDashboard, LineChart as LineChartIcon, LogIn, MessageCircle, Mic, Phone, Play, Plus, RefreshCw, Send, Server, ShieldCheck, Users, X, Zap } from "lucide-react"
 import "./styles.css"
 
 type Account = { id: string; name: string; currency: string }
@@ -34,6 +34,8 @@ type LoginSession = { pendingSessionId: string; userId: string; displayName: str
 type AlertMetricKey = "p95Ms" | "errors5xx" | "errors429" | "outboxPending" | "dbRps" | "errorBudgetRemaining"
 type AlertRule = { id: string; label: string; metric: AlertMetricKey; threshold: number; unit: string; compare: "above" | "below"; enabled: boolean; severity: "warning" | "critical" }
 type AlertEvaluation = AlertRule & { active: boolean; value: number; displayValue: string }
+type AgentMode = "chat" | "local" | "call"
+type AgentMessage = { id: string; role: "agent" | "user"; text: string }
 
 declare global {
   interface Window {
@@ -76,6 +78,9 @@ const defaultAlertRules: AlertRule[] = [
   { id: "server-errors", label: "Erros 5xx", metric: "errors5xx", threshold: 1, unit: "erros", compare: "above", enabled: true, severity: "critical" },
   { id: "rate-limit", label: "Rate limit 429", metric: "errors429", threshold: 1, unit: "erros", compare: "above", enabled: true, severity: "warning" },
   { id: "budget", label: "Error budget", metric: "errorBudgetRemaining", threshold: 0.5, unit: "", compare: "below", enabled: true, severity: "critical" }
+]
+const initialAgentMessages: AgentMessage[] = [
+  { id: "agent-welcome", role: "agent", text: "Olá, eu sou o agente Vertx. Posso ajudar com lançamentos, dashboard, alertas, Swagger e teste de carga." }
 ]
 
 function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -503,8 +508,154 @@ function Shell({ session, onLogout }: { session: LoginSession; onLogout: () => v
           </div>
         </section>
       </main>
+      <FloatingAgent />
     </div>
   )
+}
+
+function FloatingAgent() {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [mode, setMode] = useState<AgentMode | null>(null)
+  const [messages, setMessages] = useState<AgentMessage[]>(initialAgentMessages)
+  const [draft, setDraft] = useState("")
+  const [phoneNumber, setPhoneNumber] = useState("")
+  const feedRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (mode === "chat" && feedRef.current) {
+      feedRef.current.scrollTop = feedRef.current.scrollHeight
+    }
+  }, [messages, mode])
+
+  function openMode(nextMode: AgentMode) {
+    setMode(nextMode)
+    setMenuOpen(false)
+  }
+
+  function sendMessage(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const text = draft.trim()
+    if (!text) {
+      return
+    }
+
+    const userMessage: AgentMessage = { id: crypto.randomUUID(), role: "user", text }
+    const agentMessage: AgentMessage = { id: crypto.randomUUID(), role: "agent", text: buildAgentReply(text) }
+    setMessages(current => [...current, userMessage, agentMessage])
+    setDraft("")
+  }
+
+  return (
+    <div className="agent-widget">
+      {mode && (
+        <section className="agent-panel" aria-label="Agente Vertx">
+          <header className="agent-panel-header">
+            <div>
+              <span><Bot size={18} /> Agente Vertx</span>
+              <small>{agentModeLabel(mode)}</small>
+            </div>
+            <button aria-label="Fechar agente" className="agent-icon-button" onClick={() => setMode(null)} type="button"><X size={18} /></button>
+          </header>
+
+          <div className="agent-mode-switch" role="tablist" aria-label="Modo do agente">
+            <button className={mode === "chat" ? "active" : ""} onClick={() => openMode("chat")} type="button"><MessageCircle size={16} /> Chat</button>
+            <button className={mode === "local" ? "active" : ""} onClick={() => openMode("local")} type="button"><Mic size={16} /> Local</button>
+            <button className={mode === "call" ? "active" : ""} onClick={() => openMode("call")} type="button"><Phone size={16} /> Ligação</button>
+          </div>
+
+          {mode === "chat" && (
+            <>
+              <div className="agent-chat-feed" ref={feedRef}>
+                {messages.map(message => (
+                  <div className={`agent-message ${message.role}`} key={message.id}>
+                    <span>{message.text}</span>
+                  </div>
+                ))}
+              </div>
+              <form className="agent-chat-form" onSubmit={sendMessage}>
+                <input aria-label="Mensagem para o agente" value={draft} onChange={event => setDraft(event.target.value)} placeholder="Digite sua pergunta" />
+                <button aria-label="Enviar mensagem" type="submit"><Send size={18} /></button>
+              </form>
+            </>
+          )}
+
+          {mode === "local" && (
+            <div className="agent-voice-preview">
+              <div className="agent-pulse"><Mic size={32} /></div>
+              <strong>Conversa local</strong>
+              <span>Visual pronto para voz local.</span>
+              <button disabled type="button">Ativar microfone</button>
+            </div>
+          )}
+
+          {mode === "call" && (
+            <div className="agent-call-preview">
+              <label className="field">
+                <span>Número de telefone</span>
+                <input value={phoneNumber} onChange={event => setPhoneNumber(event.target.value)} inputMode="tel" placeholder="(31) 99999-9999" />
+              </label>
+              <button disabled type="button"><Phone size={18} /> Ligar com agente</button>
+              <small>Etapa visual preparada; integração telefônica será detalhada depois.</small>
+            </div>
+          )}
+        </section>
+      )}
+
+      {menuOpen && !mode && (
+        <div className="agent-menu" role="menu">
+          <button onClick={() => openMode("chat")} role="menuitem" type="button"><MessageCircle size={18} /> Conversar por chat</button>
+          <button onClick={() => openMode("local")} role="menuitem" type="button"><Mic size={18} /> Conversar local</button>
+          <button onClick={() => openMode("call")} role="menuitem" type="button"><Phone size={18} /> Conversar por ligação</button>
+        </div>
+      )}
+
+      <button className="agent-launcher" aria-label="Abrir agente Vertx" onClick={() => mode ? setMode(null) : setMenuOpen(open => !open)} type="button">
+        <Bot size={28} />
+        <span>Agente</span>
+      </button>
+    </div>
+  )
+}
+
+function agentModeLabel(mode: AgentMode) {
+  if (mode === "chat") {
+    return "Conversar por chat"
+  }
+
+  if (mode === "local") {
+    return "Conversar local"
+  }
+
+  return "Conversar por ligação"
+}
+
+function buildAgentReply(text: string) {
+  const normalized = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+  if (normalized.includes("lanc") || normalized.includes("debito") || normalized.includes("credito")) {
+    return "Para registrar, use o painel Novo lançamento: escolha crédito ou débito, conta, valor, data e descrição. Depois o dashboard e o consolidado são atualizados."
+  }
+
+  if (normalized.includes("saldo") || normalized.includes("consolid")) {
+    return "O consolidado diário vem do read model. A Entries API grava o lançamento e o worker projeta os saldos por data de negócio."
+  }
+
+  if (normalized.includes("alert") || normalized.includes("monitor") || normalized.includes("carga") || normalized.includes("k6")) {
+    return "O dashboard mostra telemetria sintética para operação visual. O requisito real de 50 RPS foi validado com k6 e está documentado em docs/testing."
+  }
+
+  if (normalized.includes("swagger") || normalized.includes("rota") || normalized.includes("api")) {
+    return "As rotas documentadas estão no Swagger em /swagger. O OpenAPI JSON fica em /openapi/v1.json."
+  }
+
+  if (normalized.includes("senha") || normalized.includes("login") || normalized.includes("acesso")) {
+    return "O acesso usa login, senha e Google reCAPTCHA v2 validado pelo BFF antes de liberar a sessão."
+  }
+
+  if (normalized.includes("telefone") || normalized.includes("ligacao") || normalized.includes("ligar")) {
+    return "A experiência de ligação já tem o campo visual de telefone. A etapa de discagem real será conectada depois, quando definirmos o provedor e o fluxo seguro."
+  }
+
+  return "Posso te orientar pelo fluxo de caixa, lançamentos, consolidado, dashboard, alertas, Swagger ou teste de carga."
 }
 
 function Metric({ title, value, icon, tone = "normal" }: { title: string; value: string; icon: React.ReactNode; tone?: "normal" | "warning" | "critical" }) {
