@@ -74,8 +74,9 @@ multi-tenant:
   SupportAgent API, RAG governado, LLM local em GPU e respostas longas
   formatadas, alem de opcoes visuais para conversa local e ligacao.
 - Conversa local continua por microfone no computador/celular, com WAV em taxa
-  nativa do navegador, envio automatico apos pausa, Qwen3-ASR local, RAG/LLM
-  governado e resposta curta falada via navegador.
+  nativa do navegador, envio automatico apos pausa, Qwen3-ASR local, bloqueio
+  silencioso de audio vazio/sem nexo/sem contexto autorizado, RAG/LLM governado
+  e resposta curta falada via navegador em velocidade 1.8.
 - Conversa social controlada: o agente responde cumprimentos, agradecimentos,
   despedidas e identidade basica, mas recusa temas fora do portal Vertx.
 - Swagger/OpenAPI documentado.

@@ -240,14 +240,14 @@ Swagger não fica no menu lateral. Ele deve ser acessado em /swagger no mesmo do
             "Agente Vertx",
             ["agente", "robo", "chat", "conversar", "ligacao", "telefone", "local", "microfone", "voz", "asr"],
             """
-O Agente Vertx fica fixo no canto inferior direito da tela autenticada. Ao clicar no ícone, aparecem três opções acima dele: Conversar por chat, Conversar local e Conversar por ligação. Conversar por chat chama o SupportAgent.Api, que usa RAG governado e LLM Qwen local em GPU. Conversar local usa o microfone do computador ou celular, grava WAV na taxa nativa do navegador, transcreve com Qwen3-ASR local, consulta o mesmo RAG/LLM governado e reproduz a resposta com a voz nativa do navegador. Conversar por ligação está preparado visualmente; discagem real e provedor telefônico serão definidos depois.
+O Agente Vertx fica fixo no canto inferior direito da tela autenticada. Ao clicar no ícone, aparecem três opções acima dele: Conversar por chat, Conversar local e Conversar por ligação. Conversar por chat chama o SupportAgent.Api, que usa RAG governado e LLM Qwen local em GPU. Conversar local usa o microfone do computador ou celular, grava WAV na taxa nativa do navegador, transcreve com Qwen3-ASR local, ignora áudio vazio, sem nexo ou sem contexto autorizado, consulta o mesmo RAG/LLM governado e reproduz resposta curta em texto plano com a voz nativa do navegador em velocidade 1.8. Conversar por ligação está preparado visualmente; discagem real e provedor telefônico serão definidos depois.
 """),
         new(
             "agent.rag_policy",
             "RAG e política do agente",
             ["rag", "politica", "policy", "controle", "permitido", "bloqueado", "llm"],
             """
-O SupportAgent.Api usa LLM local em GPU, mas não responde livremente. Antes do LLM, a pergunta passa por política de bloqueio contra prompt injection, segredos, tokens, arquivos sensíveis e comandos destrutivos. Depois passa por recuperação RAG sobre documentos curados do portal. Se não houver evidência suficiente, o agente recusa. O prompt enviado ao LLM contém apenas o contexto autorizado recuperado. A API retorna fontes internas em campo separado para auditoria e interface. O modo de voz local usa ASR local e a mesma política do chat. O agente não executa ações financeiras nem realiza ligações.
+O SupportAgent.Api usa LLM local em GPU, mas não responde livremente. Antes do LLM, a pergunta passa por política de bloqueio contra prompt injection, segredos, tokens, arquivos sensíveis e comandos destrutivos. Depois passa por recuperação RAG sobre documentos curados do portal. Se não houver evidência suficiente, o chat recusa e o modo de voz local ignora silenciosamente. O prompt enviado ao LLM contém apenas o contexto autorizado recuperado. A API retorna fontes internas em campo separado para auditoria e interface. O modo de voz local usa ASR local e a mesma política do chat. O agente não executa ações financeiras nem realiza ligações.
 """),
         new(
             "security.enterprise",

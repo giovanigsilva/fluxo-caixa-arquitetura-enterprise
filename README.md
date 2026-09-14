@@ -292,9 +292,10 @@ O mesmo subagente já aceita o canal lógico `telephony-support`, reservado para
 telefonia de apoio. O canal `portal-voice` atende conversa local por microfone:
 o navegador envia WAV na taxa nativa do dispositivo após detectar pausa na fala,
 o subagente transcreve com Qwen3-ASR local e responde com o mesmo RAG/LLM
-governado. A reprodução usa a voz nativa do navegador, com texto plano, curto e
-sem Markdown. Nesta etapa ele ainda não aciona discagem real, telefonia SIP nem
-criação automática de lançamentos.
+governado. Áudio vazio, sem nexo ou sem contexto autorizado é ignorado sem fala.
+A reprodução usa a voz nativa do navegador em velocidade 1.8, com texto plano,
+curto e sem Markdown. Nesta etapa ele ainda não aciona discagem real, telefonia
+SIP nem criação automática de lançamentos.
 
 ## Trade-offs arquiteturais
 

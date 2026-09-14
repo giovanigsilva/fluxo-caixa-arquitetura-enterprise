@@ -238,7 +238,7 @@ internal static class SwaggerDocumentation
         "tags": ["Support agent"],
         "operationId": "talkWithSupportAgentByVoice",
         "summary": "Conversa local por microfone",
-        "description": "Recebe um WAV capturado pelo navegador em multipart/form-data, transcreve no ASR local Qwen3-ASR e responde com o mesmo RAG/LLM governado do SupportAgent.Api. A reprodução de voz no portal usa speechSynthesis do navegador.",
+        "description": "Recebe um WAV capturado pelo navegador em multipart/form-data, transcreve no ASR local Qwen3-ASR e responde com o mesmo RAG/LLM governado do SupportAgent.Api. Áudio vazio, sem nexo ou sem contexto autorizado retorna voice-ignored/asr-empty sem fala no portal. A reprodução de voz usa speechSynthesis do navegador.",
         "parameters": [
           { "$ref": "#/components/parameters/TenantIdHeader" },
           { "$ref": "#/components/parameters/UserIdHeader" }
@@ -1250,9 +1250,9 @@ internal static class SwaggerDocumentation
         "required": ["transcript", "reply", "model", "mode", "citations", "asrModel"],
         "properties": {
           "transcript": { "type": "string", "description": "Texto reconhecido pelo ASR local." },
-          "reply": { "type": "string", "description": "Resposta final do agente governada pelo RAG." },
+          "reply": { "type": "string", "description": "Resposta final do agente governada pelo RAG. Pode vir vazia quando o modo for voice-ignored ou asr-empty." },
           "model": { "type": "string", "example": "Qwen/Qwen3.5-35B-A3B-GPTQ-Int4" },
-          "mode": { "type": "string", "enum": ["voice-rag-grounded-llm", "policy-refusal", "asr-empty"], "example": "voice-rag-grounded-llm" },
+          "mode": { "type": "string", "enum": ["voice-rag-grounded-llm", "voice-ignored", "policy-refusal", "asr-empty"], "example": "voice-rag-grounded-llm" },
           "citations": {
             "type": "array",
             "items": { "$ref": "#/components/schemas/RagCitation" }

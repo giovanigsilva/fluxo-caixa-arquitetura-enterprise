@@ -167,11 +167,26 @@ api.MapPost("/voice/turn", async (
     {
         return Results.Ok(new AgentVoiceTurnResponse(
             "",
-            "Não consegui entender o áudio. Fale um pouco mais perto do microfone e tente novamente.",
+            "",
             configuration.Model,
             "asr-empty",
             [],
             null,
+            transcription.Model,
+            transcription.Language,
+            transcription.TotalLatencyMs,
+            inputSampleRate));
+    }
+
+    if (AgentPolicy.ShouldIgnoreVoiceTranscript(transcript))
+    {
+        return Results.Ok(new AgentVoiceTurnResponse(
+            transcript,
+            "",
+            configuration.Model,
+            "voice-ignored",
+            [],
+            "Transcrição curta ou sem sinal suficiente para resposta por voz.",
             transcription.Model,
             transcription.Language,
             transcription.TotalLatencyMs,
@@ -197,16 +212,13 @@ api.MapPost("/voice/turn", async (
     var messages = request.Messages ?? [];
     if (AgentPolicy.TryDeny(transcript) is not null)
     {
-        var refusal = AgentChatResponse.Refused(
-            configuration.Model,
-            "Não posso ajudar com isso. Posso orientar apenas o uso seguro do portal Vertx.");
         return Results.Ok(new AgentVoiceTurnResponse(
             transcript,
-            refusal.Reply,
-            refusal.Model,
-            refusal.Mode,
-            refusal.Citations,
-            refusal.RefusalReason,
+            "",
+            configuration.Model,
+            "voice-ignored",
+            [],
+            "Transcrição bloqueada pela política do agente.",
             transcription.Model,
             transcription.Language,
             transcription.TotalLatencyMs,
@@ -216,16 +228,13 @@ api.MapPost("/voice/turn", async (
     var retrieval = rag.Search(transcript, configuration.RagMinScore);
     if (!retrieval.HasEvidence)
     {
-        var refusal = AgentChatResponse.Refused(
-            configuration.Model,
-            "Não tenho contexto autorizado para isso. Posso ajudar com menu, lançamentos, dashboard, alertas, teste de carga, manual ou Swagger.");
         return Results.Ok(new AgentVoiceTurnResponse(
             transcript,
-            refusal.Reply,
-            refusal.Model,
-            refusal.Mode,
-            refusal.Citations,
-            refusal.RefusalReason,
+            "",
+            configuration.Model,
+            "voice-ignored",
+            [],
+            "Transcrição sem contexto autorizado para resposta por voz.",
             transcription.Model,
             transcription.Language,
             transcription.TotalLatencyMs,

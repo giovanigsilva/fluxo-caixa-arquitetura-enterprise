@@ -226,6 +226,53 @@ Responda à última mensagem do usuário usando somente o contexto acima.
 internal static class AgentPolicy
 {
     private static readonly string[] AllowedChannels = ["portal-chat", "portal-voice", "telephony-support"];
+    private static readonly string[] AllowedShortVoiceTranscripts =
+    [
+        "oi",
+        "ola",
+        "alo",
+        "bom dia",
+        "boa tarde",
+        "boa noite",
+        "tudo bem",
+        "obrigado",
+        "obrigada",
+        "valeu",
+        "tchau",
+        "ajuda",
+        "me ajuda"
+    ];
+    private static readonly string[] VoiceKeywordTokens =
+    [
+        "portal",
+        "vertx",
+        "menu",
+        "dashboard",
+        "lancamento",
+        "lancamentos",
+        "lancar",
+        "debito",
+        "credito",
+        "grafico",
+        "graficos",
+        "monitoramento",
+        "alerta",
+        "alertas",
+        "teste",
+        "carga",
+        "manual",
+        "swagger",
+        "login",
+        "senha",
+        "sistema",
+        "cliente",
+        "clientes",
+        "agente",
+        "chat",
+        "voz",
+        "microfone",
+        "recaptcha"
+    ];
     private static readonly string[] DeniedNeedles =
     [
         "ignore as instrucoes",
@@ -307,6 +354,37 @@ internal static class AgentPolicy
         }
 
         return null;
+    }
+
+    public static bool ShouldIgnoreVoiceTranscript(string text)
+    {
+        var normalized = PortalRagIndex.Normalize(text);
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return true;
+        }
+
+        var tokens = normalized.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var compact = string.Concat(tokens);
+        var meaningfulCharacters = compact.Count(char.IsLetterOrDigit);
+        if (meaningfulCharacters < 2)
+        {
+            return true;
+        }
+
+        if (compact.Length > 4 && compact.Distinct().Count() <= 2)
+        {
+            return true;
+        }
+
+        if (tokens.Length > 2)
+        {
+            return false;
+        }
+
+        var phrase = string.Join(" ", tokens);
+        return !AllowedShortVoiceTranscripts.Contains(phrase, StringComparer.OrdinalIgnoreCase)
+            && !tokens.Any(token => VoiceKeywordTokens.Contains(token, StringComparer.OrdinalIgnoreCase));
     }
 
     public static string SanitizeModelReply(string reply, RagSearchResult retrieval)

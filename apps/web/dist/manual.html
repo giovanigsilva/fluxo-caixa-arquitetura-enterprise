@@ -115,7 +115,7 @@ Senha: Vtx-1d7d875ea260072afc7fa86d</pre>
           <thead><tr><th>Opcao</th><th>Funcao nesta etapa</th></tr></thead>
           <tbody>
             <tr><td>Conversar por chat</td><td>Abre um chat real via BFF e SupportAgent API. O subagente usa RAG governado e LLM local em GPU para responder de forma formatada sobre localizacao, posicao e funcao de login, menu, topo, dashboard, graficos, lancamentos, monitoramento, alertas, teste de carga, clientes, manual, Swagger e agente.</td></tr>
-            <tr><td>Conversar local</td><td>Ativa conversa por microfone no computador ou celular. O navegador grava WAV na taxa nativa do dispositivo, envia automaticamente apos pausa na fala ao SupportAgent API, transcreve com Qwen3-ASR local, consulta o mesmo RAG/LLM governado e reproduz uma resposta curta em texto plano com a voz nativa do navegador.</td></tr>
+            <tr><td>Conversar local</td><td>Ativa conversa por microfone no computador ou celular. O navegador grava WAV na taxa nativa do dispositivo, envia automaticamente apos pausa na fala ao SupportAgent API, transcreve com Qwen3-ASR local, ignora audio vazio/sem nexo/sem contexto autorizado, consulta o mesmo RAG/LLM governado e reproduz uma resposta curta em texto plano com a voz nativa do navegador em velocidade 1.8.</td></tr>
             <tr><td>Conversar por ligacao</td><td>Mostra campo para informar telefone. A discagem real e o provedor telefonico serao definidos na proxima etapa.</td></tr>
           </tbody>
         </table>

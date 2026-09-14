@@ -154,7 +154,7 @@ main { padding: 24px; }
 .agent-chat-form input:focus { border-color: #0f766e; box-shadow: 0 0 0 3px rgba(20, 184, 166, .22); outline: none; }
 .agent-chat-form button { justify-content: center; min-height: 44px; padding: 0; width: 44px; }
 .agent-voice-session, .agent-call-preview { display: grid; gap: 12px; padding: 8px 0 2px; }
-.agent-voice-session { justify-items: center; min-height: 320px; text-align: center; }
+.agent-voice-session { align-content: center; justify-items: center; min-height: 230px; text-align: center; }
 .agent-voice-session strong { color: #0f172a; font-size: 18px; }
 .agent-voice-session span, .agent-call-preview small { color: #64748b; font-size: 13px; font-weight: 700; }
 .agent-voice-actions { display: grid; gap: 8px; grid-template-columns: 1fr; width: 100%; }
@@ -162,14 +162,6 @@ main { padding: 24px; }
 .agent-secondary-button { background: #334155; }
 .agent-pulse { align-items: center; background: #ccfbf1; border: 1px solid #99f6e4; border-radius: 999px; color: #0f766e; display: flex; height: 88px; justify-content: center; width: 88px; }
 .agent-pulse.recording { animation: voicePulse 1.1s ease-in-out infinite; background: #ffe4e6; border-color: #fb7185; color: #be123c; }
-.agent-voice-turns { align-self: stretch; display: grid; gap: 10px; max-height: 255px; overflow-y: auto; width: 100%; }
-.agent-voice-turns > p { color: #64748b; font-size: 13px; font-weight: 700; margin: 0; }
-.voice-turn { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; display: grid; gap: 5px; padding: 10px; text-align: left; }
-.voice-turn small { color: #64748b; font-size: 11px; font-weight: 900; text-transform: uppercase; }
-.voice-turn p { color: #0f172a; font-size: 13px; margin: 0; }
-.voice-turn-answer p, .voice-turn-answer ul, .voice-turn-answer ol { color: #0f172a; font-size: 13px; }
-.voice-turn em { color: #64748b; font-size: 11px; font-style: normal; font-weight: 800; }
-
 @keyframes voicePulse {
   0%, 100% { box-shadow: 0 0 0 0 rgba(190, 18, 60, .22); transform: scale(1); }
   50% { box-shadow: 0 0 0 10px rgba(190, 18, 60, 0); transform: scale(1.04); }

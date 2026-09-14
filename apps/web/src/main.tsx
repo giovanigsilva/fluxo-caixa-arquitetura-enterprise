@@ -39,11 +39,10 @@ type AgentCitation = { id: string; title: string }
 type AgentMessage = { id: string; role: "agent" | "user"; text: string; citations?: AgentCitation[] }
 type AgentChatResponse = { reply: string; model: string; mode: string; citations: AgentCitation[]; refusalReason?: string | null }
 type AgentVoiceTurnResponse = { transcript: string; reply: string; model: string; mode: string; citations: AgentCitation[]; refusalReason?: string | null; asrModel: string; language?: string | null; asrLatencyMs?: number | null; inputSampleRate?: number | null }
-type AgentVoiceTurn = { id: string; transcript: string; reply: string; citations: AgentCitation[]; sampleRate?: number | null; asrLatencyMs?: number | null }
 type VoiceCaptureState = "idle" | "opening" | "recording" | "processing" | "speaking"
 
 const voiceOpeningText = "Olá seja bem vindo, em que posso te ajudar?"
-const voiceSpeechRate = 1.2
+const voiceSpeechRate = 1.8
 const voiceSpeechRmsThreshold = 0.018
 const voiceSilenceAutoSendMs = 1000
 const voiceMinCaptureMs = 700
@@ -534,7 +533,6 @@ function FloatingAgent({ session }: { session: LoginSession }) {
   const [agentError, setAgentError] = useState<string | null>(null)
   const [voiceState, setVoiceState] = useState<VoiceCaptureState>("idle")
   const [voiceError, setVoiceError] = useState<string | null>(null)
-  const [voiceTurns, setVoiceTurns] = useState<AgentVoiceTurn[]>([])
   const feedRef = useRef<HTMLDivElement | null>(null)
   const voiceAudioContextRef = useRef<AudioContext | null>(null)
   const voiceSourceRef = useRef<MediaStreamAudioSourceNode | null>(null)
@@ -753,14 +751,16 @@ function FloatingAgent({ session }: { session: LoginSession }) {
       }
 
       const turn = await response.json() as AgentVoiceTurnResponse
-      setVoiceTurns(current => [...current, {
-        id: crypto.randomUUID(),
-        transcript: turn.transcript,
-        reply: turn.reply,
-        citations: turn.citations,
-        sampleRate: turn.inputSampleRate,
-        asrLatencyMs: turn.asrLatencyMs
-      }])
+      if (!turn.reply.trim() || turn.mode === "asr-empty" || turn.mode === "voice-ignored") {
+        voiceSendInFlightRef.current = false
+        if (voiceSessionActiveRef.current) {
+          void beginVoiceListening()
+        } else {
+          setVoiceStatus("idle")
+        }
+        return
+      }
+
       voiceSendInFlightRef.current = false
       if (!voiceSessionActiveRef.current) {
         setVoiceStatus("idle")
@@ -879,19 +879,6 @@ function FloatingAgent({ session }: { session: LoginSession }) {
                 )}
               </div>
               {voiceError && <p className="agent-panel-error">{voiceError}</p>}
-              <div className="agent-voice-turns">
-                {voiceTurns.length === 0 ? (
-                  <p>Conexão contínua pronta para atendimento por voz.</p>
-                ) : voiceTurns.slice(-3).map(turn => (
-                  <div className="voice-turn" key={turn.id}>
-                    <small>Você disse</small>
-                    <p>{turn.transcript || "Áudio sem transcrição"}</p>
-                    <small>Agente respondeu</small>
-                    <div className="voice-turn-answer">{renderAgentText(stripAgentSourceLine(turn.reply))}</div>
-                    {turn.sampleRate ? <em>{integer.format(turn.sampleRate)} Hz capturados{turn.asrLatencyMs ? `, ASR ${Math.round(turn.asrLatencyMs)} ms` : ""}</em> : null}
-                  </div>
-                ))}
-              </div>
             </div>
           )}
 
