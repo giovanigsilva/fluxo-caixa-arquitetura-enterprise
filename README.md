@@ -10,6 +10,7 @@ exportação de extrato, simulação de observabilidade e SPA em pt-BR.
 
 ## Sumário
 
+- [Manual do examinador](#manual-do-examinador)
 - [Estado atual](#estado-atual)
 - [Credenciais de avaliação](#credenciais-de-avaliacao)
 - [Endereços publicados](#enderecos-publicados)
@@ -29,6 +30,13 @@ exportação de extrato, simulação de observabilidade e SPA em pt-BR.
 - [Operação diária](#operacao-diaria)
 - [Troubleshooting](#troubleshooting)
 - [Limites conhecidos](#limites-conhecidos)
+
+## Manual do examinador
+
+O arquivo [`MANUAL-DO-EXAMINADOR.md`](MANUAL-DO-EXAMINADOR.md) e a entrada
+principal para avaliacao pelo repositorio. Ele consolida os links publicos,
+credenciais de teste, roteiro de avaliacao, comandos locais e aponta para o
+manual completo em [`docs/manual-de-uso.md`](docs/manual-de-uso.md).
 
 ## Estado atual
 
@@ -716,6 +724,7 @@ Refazer tudo do zero sem apagar volumes manualmente:
 
 ## Documentação adicional
 
+- `MANUAL-DO-EXAMINADOR.md`
 - `docs/architecture/definition.md`
 - `docs/manual-de-uso.md`
 - `docs/architecture/baseline-delta.md`
