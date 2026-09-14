@@ -1,12 +1,15 @@
 using System.Net.Http.Json;
 using System.Globalization;
+using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
 internal sealed record AgentConfiguration(
     string LlmBaseUrl,
+    string AsrBaseUrl,
     string Model,
     int TimeoutSeconds,
+    int AsrTimeoutSeconds,
     int MaxTokens,
     double Temperature,
     double RagMinScore)
@@ -15,8 +18,10 @@ internal sealed record AgentConfiguration(
     {
         return new AgentConfiguration(
             Environment.GetEnvironmentVariable("VERTX_AGENT_LLM_BASE_URL") ?? "http://127.0.0.1:8220",
+            Environment.GetEnvironmentVariable("VERTX_AGENT_ASR_BASE_URL") ?? "http://127.0.0.1:8224",
             Environment.GetEnvironmentVariable("VERTX_AGENT_LLM_MODEL") ?? "Qwen/Qwen3.5-35B-A3B-GPTQ-Int4",
             ParseInt("VERTX_AGENT_LLM_TIMEOUT_SECONDS", 45),
+            ParseInt("VERTX_AGENT_ASR_TIMEOUT_SECONDS", 60),
             ParseInt("VERTX_AGENT_LLM_MAX_TOKENS", 1200),
             ParseDouble("VERTX_AGENT_LLM_TEMPERATURE", 0.15),
             ParseDouble("VERTX_AGENT_RAG_MIN_SCORE", 2.0));
@@ -43,6 +48,17 @@ internal sealed record AgentChatResponse(string Reply, string Model, string Mode
         return new AgentChatResponse(reason, model, "policy-refusal", [], reason);
     }
 }
+internal sealed record AgentVoiceTurnResponse(
+    string Transcript,
+    string Reply,
+    string Model,
+    string Mode,
+    RagCitation[] Citations,
+    string? RefusalReason,
+    string AsrModel,
+    string? Language,
+    double? AsrLatencyMs,
+    int? InputSampleRate);
 
 internal sealed class VllmChatClient(HttpClient httpClient)
 {
@@ -93,6 +109,40 @@ internal sealed record VllmChatCompletionRequest(
 internal sealed record VllmChatCompletionResponse(VllmChoice[] Choices);
 internal sealed record VllmChoice(VllmChoiceMessage Message);
 internal sealed record VllmChoiceMessage(string Role, string? Content);
+
+internal sealed class QwenAsrClient(HttpClient httpClient)
+{
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
+    public async Task<AsrTranscription> TranscribeAsync(Stream audio, string fileName, string contentType, CancellationToken ct)
+    {
+        using var form = new MultipartFormDataContent();
+        using var file = new StreamContent(audio);
+        file.Headers.ContentType = new MediaTypeHeaderValue(string.IsNullOrWhiteSpace(contentType) ? "audio/wav" : contentType);
+        form.Add(file, "file", string.IsNullOrWhiteSpace(fileName) ? "portal-voice.wav" : fileName);
+
+        using var response = await httpClient.PostAsync("transcribe", form, ct).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            throw new HttpRequestException($"ASR returned {(int)response.StatusCode}: {body}");
+        }
+
+        var transcription = await response.Content.ReadFromJsonAsync<AsrTranscription>(JsonOptions, ct).ConfigureAwait(false);
+        if (transcription is null)
+        {
+            throw new JsonException("ASR response without transcription payload.");
+        }
+
+        return transcription;
+    }
+}
+
+internal sealed record AsrTranscription(
+    string? Text,
+    string? Language,
+    string Model,
+    [property: JsonPropertyName("total_latency_ms")] double? TotalLatencyMs);
 
 internal static class AgentPromptBuilder
 {
@@ -164,7 +214,7 @@ Responda à última mensagem do usuário usando somente o contexto acima.
 
 internal static class AgentPolicy
 {
-    private static readonly string[] AllowedChannels = ["portal-chat", "telephony-support"];
+    private static readonly string[] AllowedChannels = ["portal-chat", "portal-voice", "telephony-support"];
     private static readonly string[] DeniedNeedles =
     [
         "ignore as instrucoes",

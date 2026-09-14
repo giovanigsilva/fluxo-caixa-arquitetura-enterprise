@@ -233,6 +233,31 @@ internal static class SwaggerDocumentation
         }
       }
     },
+    "/api/agent/voice/turn": {
+      "post": {
+        "tags": ["Support agent"],
+        "operationId": "talkWithSupportAgentByVoice",
+        "summary": "Conversa local por microfone",
+        "description": "Recebe um WAV capturado pelo navegador em multipart/form-data, transcreve no ASR local Qwen3-ASR e responde com o mesmo RAG/LLM governado do SupportAgent.Api. A reprodução de voz no portal usa speechSynthesis do navegador.",
+        "parameters": [
+          { "$ref": "#/components/parameters/TenantIdHeader" },
+          { "$ref": "#/components/parameters/UserIdHeader" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": { "$ref": "#/components/schemas/AgentVoiceTurnRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "$ref": "#/components/responses/AgentVoiceTurnResponse" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
     "/api/entries/customers": {
       "get": {
         "tags": ["Entries - customers"],
@@ -929,13 +954,35 @@ internal static class SwaggerDocumentation
           "application/json": {
             "schema": { "$ref": "#/components/schemas/AgentChatResponse" },
             "example": {
-              "reply": "Novo lançamento fica abaixo dos gráficos, no painel da esquerda. Fontes: entries.form",
+              "reply": "Novo lançamento fica abaixo dos gráficos, no painel da esquerda.",
               "model": "Qwen/Qwen3.5-35B-A3B-GPTQ-Int4",
               "mode": "rag-grounded-llm",
               "citations": [
                 { "id": "entries.form", "title": "Novo lançamento" }
               ],
               "refusalReason": null
+            }
+          }
+        }
+      },
+      "AgentVoiceTurnResponse": {
+        "description": "Transcrição e resposta do agente por voz local.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/AgentVoiceTurnResponse" },
+            "example": {
+              "transcript": "Onde fica o novo lançamento?",
+              "reply": "Novo lançamento fica abaixo dos gráficos, no painel da esquerda.",
+              "model": "Qwen/Qwen3.5-35B-A3B-GPTQ-Int4",
+              "mode": "voice-rag-grounded-llm",
+              "citations": [
+                { "id": "entries.form", "title": "Novo lançamento" }
+              ],
+              "refusalReason": null,
+              "asrModel": "Qwen/Qwen3-ASR-0.6B",
+              "language": "Portuguese",
+              "asrLatencyMs": 180.4,
+              "inputSampleRate": 48000
             }
           }
         }
@@ -1157,7 +1204,7 @@ internal static class SwaggerDocumentation
         "required": ["messages"],
         "properties": {
           "sessionId": { "type": "string", "nullable": true, "example": "ps_00000000000000000000000000000000" },
-          "channel": { "type": "string", "enum": ["portal-chat", "telephony-support"], "example": "portal-chat" },
+          "channel": { "type": "string", "enum": ["portal-chat", "portal-voice", "telephony-support"], "example": "portal-chat" },
           "messages": {
             "type": "array",
             "minItems": 1,
@@ -1186,6 +1233,35 @@ internal static class SwaggerDocumentation
             "items": { "$ref": "#/components/schemas/RagCitation" }
           },
           "refusalReason": { "type": "string", "nullable": true, "description": "Motivo quando a política ou falta de evidência bloqueia a resposta." }
+        }
+      },
+      "AgentVoiceTurnRequest": {
+        "type": "object",
+        "required": ["file"],
+        "properties": {
+          "file": { "type": "string", "format": "binary", "description": "Arquivo WAV mono capturado pelo navegador." },
+          "sessionId": { "type": "string", "nullable": true, "example": "ps_00000000000000000000000000000000" },
+          "channel": { "type": "string", "enum": ["portal-voice"], "example": "portal-voice" },
+          "sampleRate": { "type": "integer", "format": "int32", "nullable": true, "description": "Taxa de captura do navegador, normalmente 44100 ou 48000 Hz.", "example": 48000 }
+        }
+      },
+      "AgentVoiceTurnResponse": {
+        "type": "object",
+        "required": ["transcript", "reply", "model", "mode", "citations", "asrModel"],
+        "properties": {
+          "transcript": { "type": "string", "description": "Texto reconhecido pelo ASR local." },
+          "reply": { "type": "string", "description": "Resposta final do agente governada pelo RAG." },
+          "model": { "type": "string", "example": "Qwen/Qwen3.5-35B-A3B-GPTQ-Int4" },
+          "mode": { "type": "string", "enum": ["voice-rag-grounded-llm", "policy-refusal", "asr-empty"], "example": "voice-rag-grounded-llm" },
+          "citations": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/RagCitation" }
+          },
+          "refusalReason": { "type": "string", "nullable": true },
+          "asrModel": { "type": "string", "example": "Qwen/Qwen3-ASR-0.6B" },
+          "language": { "type": "string", "nullable": true, "example": "Portuguese" },
+          "asrLatencyMs": { "type": "number", "format": "double", "nullable": true, "example": 180.4 },
+          "inputSampleRate": { "type": "integer", "format": "int32", "nullable": true, "example": 48000 }
         }
       },
       "RagCitation": {

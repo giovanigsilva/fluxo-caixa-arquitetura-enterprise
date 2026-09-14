@@ -91,8 +91,10 @@ Ao clicar nele, aparecem tres opcoes acima do simbolo:
   As respostas sao maiores e formatadas em blocos/listas. A API retorna fontes
   internas separadas para auditoria, e a interface mostra nomes amigaveis quando
   for relevante.
-- `Conversar local`: abre a tela visual do modo de voz local. A ativacao real de
-  microfone sera detalhada em etapa posterior.
+- `Conversar local`: ativa conversa por microfone no computador ou celular. O
+  navegador grava WAV na taxa nativa do dispositivo, envia ao `SupportAgent API`,
+  o subagente transcreve com Qwen3-ASR local, consulta o mesmo RAG/LLM governado
+  e reproduz a resposta com a voz nativa do navegador.
 - `Conversar por ligacao`: abre a tela visual com campo para numero de telefone.
   A discagem real e a escolha do provedor telefonico serao detalhadas depois.
 
@@ -199,8 +201,8 @@ Saude dos componentes:
 - `RabbitMQ`: broker planejado/simulado.
 - `Redis`: cache/quota planejado/simulado.
 - `Observability`: stack preparada.
-- `AI boundary`: indica o subagente de apoio com RAG governado e LLM local em
-  GPU.
+- `AI boundary`: indica o subagente de apoio com RAG governado, LLM local em GPU
+  e voz local por Qwen3-ASR.
 
 ## Controle De Alertas
 

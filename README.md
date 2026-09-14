@@ -289,8 +289,11 @@ O controle de resposta é feito antes do LLM:
   auditoria e a interface exibe nomes amigáveis quando relevante.
 
 O mesmo subagente já aceita o canal lógico `telephony-support`, reservado para a
-telefonia de apoio. Nesta etapa ele ainda não aciona ASR, TTS, microfone,
-discagem real nem criação automática de lançamentos.
+telefonia de apoio. O canal `portal-voice` atende conversa local por microfone:
+o navegador envia WAV na taxa nativa do dispositivo, o subagente transcreve com
+Qwen3-ASR local e responde com o mesmo RAG/LLM governado. A reprodução da
+resposta usa a voz nativa do navegador. Nesta etapa ele ainda não aciona
+discagem real, telefonia SIP nem criação automática de lançamentos.
 
 ## Trade-offs arquiteturais
 
@@ -466,6 +469,7 @@ Health e documentação:
 Support Agent:
 
 - `POST /api/agent/chat`
+- `POST /api/agent/voice/turn`
 
 Entries:
 
@@ -598,6 +602,8 @@ UAT:
 - SupportAgent API: interno no Compose, sem porta pública direta
 - LLM local consumido pelo subagente: `qwen3-llm-realtime-test` via rede Docker
   `census-realtime-agent-test_realtime`
+- ASR local consumido pelo modo microfone: `qwen3-asr-offline-test` via rede
+  Docker `census-realtime-agent-test_realtime`
 - Runtime: `.runtime/uat`
 - Secrets: `.secrets/uat`
 
@@ -610,6 +616,8 @@ Production:
 - SupportAgent API: interno no Compose, sem porta pública direta
 - LLM local consumido pelo subagente: `qwen3-llm-realtime-test` via rede Docker
   `census-realtime-agent-test_realtime`
+- ASR local consumido pelo modo microfone: `qwen3-asr-offline-test` via rede
+  Docker `census-realtime-agent-test_realtime`
 - Runtime: `.runtime/production`
 - Secrets: `.secrets/production`
 
@@ -789,8 +797,9 @@ Refazer tudo do zero sem apagar volumes manualmente:
 - RabbitMQ/Redis/Keycloak/Vault estão preparados, mas não integrados ao fluxo
   padrão validado.
 - A Observability API retorna telemetria sintética rotulada.
-- O agente usa LLM local em GPU com RAG governado; conversa local por microfone,
-  TTS e discagem real ainda são etapas futuras.
+- O agente usa LLM local em GPU com RAG governado e conversa local por
+  microfone com Qwen3-ASR. A voz de resposta usa `speechSynthesis` do navegador;
+  TTS dedicado do servidor e discagem real ainda são etapas futuras.
 - O QR Code do Google Fraud Defense depende de allowlist da Google e ativação do
   fluxo reCAPTCHA Enterprise; hoje está ativo o Google reCAPTCHA v2 checkbox.
 - O domínio profundo `uat.vertx.dwilon.com` pode exigir certificado Cloudflare

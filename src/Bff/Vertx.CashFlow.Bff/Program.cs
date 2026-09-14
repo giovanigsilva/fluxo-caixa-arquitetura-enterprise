@@ -6,7 +6,7 @@ using System.Text.Json.Serialization;
 using Vertx.CashFlow.BuildingBlocks;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddHttpClient("proxy", client => client.Timeout = TimeSpan.FromSeconds(20));
+builder.Services.AddHttpClient("proxy", client => client.Timeout = TimeSpan.FromSeconds(90));
 builder.Services.AddHttpClient("recaptcha", client =>
 {
     client.BaseAddress = new Uri("https://www.google.com/");

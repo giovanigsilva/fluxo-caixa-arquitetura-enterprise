@@ -73,6 +73,8 @@ multi-tenant:
 - Agente Vertx flutuante no canto inferior direito, com chat real via
   SupportAgent API, RAG governado, LLM local em GPU e respostas longas
   formatadas, alem de opcoes visuais para conversa local e ligacao.
+- Conversa local por microfone no computador/celular, com WAV em taxa nativa do
+  navegador, Qwen3-ASR local, RAG/LLM governado e resposta falada via navegador.
 - Conversa social controlada: o agente responde cumprimentos, agradecimentos,
   despedidas e identidade basica, mas recusa temas fora do portal Vertx.
 - Swagger/OpenAPI documentado.

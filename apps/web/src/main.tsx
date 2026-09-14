@@ -2,7 +2,7 @@ import React, { FormEvent, useEffect, useRef, useState } from "react"
 import { createRoot } from "react-dom/client"
 import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
-import { Activity, AlertTriangle, Banknote, Bell, Bot, Building2, CheckCircle2, CircleDollarSign, Database, FileText, Gauge, LayoutDashboard, LineChart as LineChartIcon, LogIn, MessageCircle, Mic, Phone, Play, Plus, RefreshCw, Send, Server, ShieldCheck, Users, X, Zap } from "lucide-react"
+import { Activity, AlertTriangle, Banknote, Bell, Bot, Building2, CheckCircle2, CircleDollarSign, Database, FileText, Gauge, LayoutDashboard, LineChart as LineChartIcon, LogIn, MessageCircle, Mic, Phone, Play, Plus, RefreshCw, Send, Server, ShieldCheck, Square, Users, X, Zap } from "lucide-react"
 import "./styles.css"
 
 type Account = { id: string; name: string; currency: string }
@@ -38,6 +38,9 @@ type AgentMode = "chat" | "local" | "call"
 type AgentCitation = { id: string; title: string }
 type AgentMessage = { id: string; role: "agent" | "user"; text: string; citations?: AgentCitation[] }
 type AgentChatResponse = { reply: string; model: string; mode: string; citations: AgentCitation[]; refusalReason?: string | null }
+type AgentVoiceTurnResponse = { transcript: string; reply: string; model: string; mode: string; citations: AgentCitation[]; refusalReason?: string | null; asrModel: string; language?: string | null; asrLatencyMs?: number | null; inputSampleRate?: number | null }
+type AgentVoiceTurn = { id: string; transcript: string; reply: string; citations: AgentCitation[]; sampleRate?: number | null; asrLatencyMs?: number | null }
+type VoiceCaptureState = "idle" | "recording" | "processing" | "speaking"
 
 declare global {
   interface Window {
@@ -523,13 +526,28 @@ function FloatingAgent({ session }: { session: LoginSession }) {
   const [phoneNumber, setPhoneNumber] = useState("")
   const [agentPending, setAgentPending] = useState(false)
   const [agentError, setAgentError] = useState<string | null>(null)
+  const [voiceState, setVoiceState] = useState<VoiceCaptureState>("idle")
+  const [voiceError, setVoiceError] = useState<string | null>(null)
+  const [voiceTurns, setVoiceTurns] = useState<AgentVoiceTurn[]>([])
   const feedRef = useRef<HTMLDivElement | null>(null)
+  const voiceAudioContextRef = useRef<AudioContext | null>(null)
+  const voiceSourceRef = useRef<MediaStreamAudioSourceNode | null>(null)
+  const voiceProcessorRef = useRef<ScriptProcessorNode | null>(null)
+  const voiceSinkRef = useRef<GainNode | null>(null)
+  const voiceStreamRef = useRef<MediaStream | null>(null)
+  const voiceChunksRef = useRef<Float32Array[]>([])
+  const voiceSampleRateRef = useRef<number>(48000)
 
   useEffect(() => {
     if (mode === "chat" && feedRef.current) {
       feedRef.current.scrollTop = feedRef.current.scrollHeight
     }
   }, [messages, mode])
+
+  useEffect(() => () => {
+    stopVoiceCapture()
+    window.speechSynthesis?.cancel()
+  }, [])
 
   function openMode(nextMode: AgentMode) {
     setMode(nextMode)
@@ -580,6 +598,136 @@ function FloatingAgent({ session }: { session: LoginSession }) {
     }
   }
 
+  async function startVoiceCapture() {
+    if (voiceState !== "idle") {
+      return
+    }
+
+    const AudioContextCtor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+    if (!navigator.mediaDevices?.getUserMedia || !AudioContextCtor) {
+      setVoiceError("Este navegador não liberou captura de microfone.")
+      return
+    }
+
+    try {
+      setVoiceError(null)
+      window.speechSynthesis?.cancel()
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          autoGainControl: true,
+          echoCancellation: true,
+          noiseSuppression: true
+        }
+      })
+      const audioContext = new AudioContextCtor()
+      const source = audioContext.createMediaStreamSource(stream)
+      const processor = audioContext.createScriptProcessor(4096, 1, 1)
+      const sink = audioContext.createGain()
+      sink.gain.value = 0
+      voiceChunksRef.current = []
+      voiceSampleRateRef.current = audioContext.sampleRate
+      processor.onaudioprocess = event => {
+        voiceChunksRef.current.push(new Float32Array(event.inputBuffer.getChannelData(0)))
+      }
+      source.connect(processor)
+      processor.connect(sink)
+      sink.connect(audioContext.destination)
+      voiceStreamRef.current = stream
+      voiceAudioContextRef.current = audioContext
+      voiceSourceRef.current = source
+      voiceProcessorRef.current = processor
+      voiceSinkRef.current = sink
+      setVoiceState("recording")
+    } catch (failure) {
+      stopVoiceCapture()
+      setVoiceError(readError(failure))
+      setVoiceState("idle")
+    }
+  }
+
+  async function stopVoiceCaptureAndSend() {
+    if (voiceState !== "recording") {
+      return
+    }
+
+    const chunks = voiceChunksRef.current
+    const sampleRate = voiceSampleRateRef.current
+    stopVoiceCapture()
+    if (!chunks.length) {
+      setVoiceError("Não capturei áudio suficiente. Tente falar por alguns segundos.")
+      setVoiceState("idle")
+      return
+    }
+
+    setVoiceState("processing")
+    setVoiceError(null)
+    try {
+      const audio = encodeWav(chunks, sampleRate)
+      const form = new FormData()
+      form.append("file", audio, "portal-voice.wav")
+      form.append("sessionId", session.pendingSessionId)
+      form.append("channel", "portal-voice")
+      form.append("sampleRate", String(sampleRate))
+      const response = await fetch("/api/agent/voice/turn", {
+        method: "POST",
+        headers: tenantHeaders,
+        body: form
+      })
+      if (!response.ok) {
+        throw new Error(await response.text())
+      }
+
+      const turn = await response.json() as AgentVoiceTurnResponse
+      setVoiceTurns(current => [...current, {
+        id: crypto.randomUUID(),
+        transcript: turn.transcript,
+        reply: turn.reply,
+        citations: turn.citations,
+        sampleRate: turn.inputSampleRate,
+        asrLatencyMs: turn.asrLatencyMs
+      }])
+      speakVoiceReply(turn.reply)
+    } catch (failure) {
+      setVoiceError(readError(failure))
+      setVoiceState("idle")
+    }
+  }
+
+  function stopVoiceCapture() {
+    voiceProcessorRef.current?.disconnect()
+    voiceSinkRef.current?.disconnect()
+    voiceSourceRef.current?.disconnect()
+    voiceStreamRef.current?.getTracks().forEach(track => track.stop())
+    void voiceAudioContextRef.current?.close()
+    voiceProcessorRef.current = null
+    voiceSinkRef.current = null
+    voiceSourceRef.current = null
+    voiceStreamRef.current = null
+    voiceAudioContextRef.current = null
+  }
+
+  function speakVoiceReply(reply: string) {
+    if (!("speechSynthesis" in window)) {
+      setVoiceState("idle")
+      return
+    }
+
+    const utterance = new SpeechSynthesisUtterance(stripAgentSourceLine(reply))
+    utterance.lang = "pt-BR"
+    utterance.rate = 1
+    utterance.pitch = 1
+    utterance.onend = () => setVoiceState("idle")
+    utterance.onerror = () => setVoiceState("idle")
+    window.speechSynthesis.cancel()
+    window.speechSynthesis.speak(utterance)
+    setVoiceState("speaking")
+  }
+
+  function stopVoiceSpeaking() {
+    window.speechSynthesis?.cancel()
+    setVoiceState("idle")
+  }
+
   return (
     <div className="agent-widget">
       {mode && (
@@ -620,11 +768,32 @@ function FloatingAgent({ session }: { session: LoginSession }) {
           )}
 
           {mode === "local" && (
-            <div className="agent-voice-preview">
-              <div className="agent-pulse"><Mic size={32} /></div>
-              <strong>Conversa local</strong>
-              <span>Visual pronto para voz local.</span>
-              <button disabled type="button">Ativar microfone</button>
+            <div className="agent-voice-session">
+              <div className={`agent-pulse ${voiceState === "recording" ? "recording" : ""}`}><Mic size={32} /></div>
+              <strong>{voiceStatusTitle(voiceState)}</strong>
+              <span>{voiceStatusDescription(voiceState, voiceSampleRateRef.current)}</span>
+              <div className="agent-voice-actions">
+                {voiceState === "recording" ? (
+                  <button onClick={stopVoiceCaptureAndSend} type="button"><Square size={18} /> Parar e enviar</button>
+                ) : (
+                  <button disabled={voiceState === "processing" || voiceState === "speaking"} onClick={startVoiceCapture} type="button"><Mic size={18} /> Falar agora</button>
+                )}
+                {voiceState === "speaking" && <button className="agent-secondary-button" onClick={stopVoiceSpeaking} type="button"><X size={18} /> Parar áudio</button>}
+              </div>
+              {voiceError && <p className="agent-panel-error">{voiceError}</p>}
+              <div className="agent-voice-turns">
+                {voiceTurns.length === 0 ? (
+                  <p>Toque em Falar agora, permita o microfone e faça uma pergunta sobre o portal.</p>
+                ) : voiceTurns.slice(-3).map(turn => (
+                  <div className="voice-turn" key={turn.id}>
+                    <small>Você disse</small>
+                    <p>{turn.transcript || "Áudio sem transcrição"}</p>
+                    <small>Agente respondeu</small>
+                    <div className="voice-turn-answer">{renderAgentText(stripAgentSourceLine(turn.reply))}</div>
+                    {turn.sampleRate ? <em>{integer.format(turn.sampleRate)} Hz capturados{turn.asrLatencyMs ? `, ASR ${Math.round(turn.asrLatencyMs)} ms` : ""}</em> : null}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
@@ -667,6 +836,82 @@ function agentModeLabel(mode: AgentMode) {
   }
 
   return "Conversar por ligação"
+}
+
+function voiceStatusTitle(state: VoiceCaptureState) {
+  if (state === "recording") {
+    return "Ouvindo agora"
+  }
+
+  if (state === "processing") {
+    return "Pensando na resposta"
+  }
+
+  if (state === "speaking") {
+    return "Respondendo por voz"
+  }
+
+  return "Conversa local"
+}
+
+function voiceStatusDescription(state: VoiceCaptureState, sampleRate: number) {
+  if (state === "recording") {
+    return `Capturando áudio em ${integer.format(sampleRate)} Hz.`
+  }
+
+  if (state === "processing") {
+    return "Transcrevendo com ASR local e consultando o agente."
+  }
+
+  if (state === "speaking") {
+    return "Reproduzindo a resposta no dispositivo."
+  }
+
+  return "Use o microfone do computador ou celular para falar com o agente."
+}
+
+function encodeWav(chunks: Float32Array[], sampleRate: number) {
+  const samples = mergeAudioChunks(chunks)
+  const buffer = new ArrayBuffer(44 + samples.length * 2)
+  const view = new DataView(buffer)
+  writeAscii(view, 0, "RIFF")
+  view.setUint32(4, 36 + samples.length * 2, true)
+  writeAscii(view, 8, "WAVE")
+  writeAscii(view, 12, "fmt ")
+  view.setUint32(16, 16, true)
+  view.setUint16(20, 1, true)
+  view.setUint16(22, 1, true)
+  view.setUint32(24, sampleRate, true)
+  view.setUint32(28, sampleRate * 2, true)
+  view.setUint16(32, 2, true)
+  view.setUint16(34, 16, true)
+  writeAscii(view, 36, "data")
+  view.setUint32(40, samples.length * 2, true)
+  let offset = 44
+  samples.forEach(sample => {
+    const clamped = Math.max(-1, Math.min(1, sample))
+    view.setInt16(offset, clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff, true)
+    offset += 2
+  })
+
+  return new Blob([buffer], { type: "audio/wav" })
+}
+
+function mergeAudioChunks(chunks: Float32Array[]) {
+  const totalLength = chunks.reduce((total, chunk) => total + chunk.length, 0)
+  const result = new Float32Array(totalLength)
+  let offset = 0
+  chunks.forEach(chunk => {
+    result.set(chunk, offset)
+    offset += chunk.length
+  })
+  return result
+}
+
+function writeAscii(view: DataView, offset: number, value: string) {
+  for (let index = 0; index < value.length; index += 1) {
+    view.setUint8(offset + index, value.charCodeAt(index))
+  }
 }
 
 function renderAgentText(text: string) {
