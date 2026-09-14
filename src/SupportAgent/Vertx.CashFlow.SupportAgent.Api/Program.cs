@@ -15,6 +15,16 @@ builder.Services.AddHttpClient<MatchaTtsClient>((services, client) =>
     client.BaseAddress = new Uri(configuration.TtsBaseUrl.TrimEnd('/') + "/");
     client.Timeout = TimeSpan.FromSeconds(configuration.TtsTimeoutSeconds);
 });
+builder.Services.AddHttpClient<PortalTelephonyClient>((services, client) =>
+{
+    var configuration = services.GetRequiredService<AgentConfiguration>();
+    if (!string.IsNullOrWhiteSpace(configuration.TelephonyBaseUrl))
+    {
+        client.BaseAddress = new Uri(configuration.TelephonyBaseUrl.TrimEnd('/') + "/");
+    }
+
+    client.Timeout = TimeSpan.FromSeconds(configuration.TelephonyTimeoutSeconds);
+});
 builder.Services.AddHttpClient<VllmChatClient>((services, client) =>
 {
     var configuration = services.GetRequiredService<AgentConfiguration>();
@@ -38,6 +48,7 @@ app.MapGet("/health/ready", (AgentConfiguration configuration, PortalRagIndex ra
     model = configuration.Model,
     voice = "qwen-asr-browser-speech",
     tts = configuration.TtsVoiceId,
+    telephony = configuration.TelephonyEnabled ? configuration.TelephonyProvider : "disabled",
     mcp = "portal-runtime-readonly",
     ragDocuments = rag.DocumentCount
 }));
@@ -50,6 +61,7 @@ api.MapGet("/health/ready", (AgentConfiguration configuration, PortalRagIndex ra
     model = configuration.Model,
     voice = "qwen-asr-browser-speech",
     tts = configuration.TtsVoiceId,
+    telephony = configuration.TelephonyEnabled ? configuration.TelephonyProvider : "disabled",
     mcp = "portal-runtime-readonly",
     ragDocuments = rag.DocumentCount
 }));
@@ -112,6 +124,57 @@ api.MapPost("/tts/synthesize", async (
     }
 })
 .WithSummary("Sintetiza fala do portal com o Matcha TTS atual e retorna WAV.");
+
+api.MapGet("/call/health", async (
+    PortalTelephonyClient telephony,
+    CancellationToken ct) =>
+{
+    var health = await telephony.GetHealthAsync(ct).ConfigureAwait(false);
+    return Results.Ok(health);
+})
+.WithSummary("Consulta a disponibilidade do bridge de telefonia Vero do agente.");
+
+api.MapPost("/call/start", async (
+    HttpContext httpContext,
+    AgentCallStartRequest request,
+    PortalTelephonyClient telephony,
+    CancellationToken ct) =>
+{
+    if (!PortalTelephonyClient.TryNormalizeBrazilianPhone(request.PhoneNumber, out _, out var phoneError))
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["phoneNumber"] = [phoneError ?? "Telefone inválido."]
+        });
+    }
+
+    try
+    {
+        var result = await telephony.StartSupportCallAsync(
+            request,
+            HeaderOrDefault(httpContext, "X-Tenant-Id", "org-alpha"),
+            HeaderOrDefault(httpContext, "X-User-Id", "user-admin-alpha"),
+            ct).ConfigureAwait(false);
+        return Results.Ok(result);
+    }
+    catch (InvalidOperationException exception)
+    {
+        return Results.Problem(exception.Message, statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
+    catch (HttpRequestException exception)
+    {
+        return Results.Problem(
+            exception.Message,
+            statusCode: exception.StatusCode == System.Net.HttpStatusCode.Conflict
+                ? StatusCodes.Status409Conflict
+                : StatusCodes.Status503ServiceUnavailable);
+    }
+    catch (TaskCanceledException)
+    {
+        return Results.Problem("Tempo esgotado ao solicitar chamada pela Vero.", statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
+})
+.WithSummary("Solicita uma ligação de suporte pelo bridge Vero e retorna o roteiro visual do portal.");
 
 api.MapPost("/chat", async (
     HttpContext httpContext,

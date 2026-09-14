@@ -100,7 +100,12 @@ Ao clicar nele, aparecem tres opcoes acima do simbolo:
   `freds-cml-stress-1000`. A voz nativa do navegador fica apenas como fallback
   caso o Matcha esteja indisponivel ou nao autorizado.
 - `Conversar por ligacao`: abre a tela visual com campo para numero de telefone.
-  A discagem real e a escolha do provedor telefonico serao detalhadas depois.
+  Informe o telefone com DDD e acione `Ligar com agente`. O portal chama
+  `POST /api/agent/call/start`, o SupportAgent valida e normaliza o numero,
+  solicita a chamada no bridge Vero dedicado e exibe o status de discagem. Quando
+  a chamada e aceita, a tela rola e pisca os itens principais enquanto o agente
+  orienta por voz: dashboard, cards, graficos, Novo lancamento, Teste de carga,
+  Lancamentos, Monitoramento do sistema e Controle de alertas.
 
 O RAG do agente contem documentos curados sobre login, menu lateral, topo,
 dashboard, graficos, lancamentos, clientes, monitoramento, alertas, teste de
@@ -108,6 +113,10 @@ carga, manual, Swagger, seguranca, cordialidades simples, MCP readonly e o
 proprio agente. Se a pergunta nao tiver evidencia nesses documentos, o agente
 recusa. Ele tambem bloqueia prompt injection, pedidos de secrets/tokens,
 arquivos sensiveis, comandos destrutivos e operacoes financeiras automaticas.
+Na ligacao, o agente usa o perfil de fala da linha 04: Matcha TTS
+`freds-cml-stress-1000`, normalizacao de pontuacao, filtro de backchannel e
+limite de 120 segundos, em um bridge separado dos fluxos de cobranca, SDR e
+pesquisa.
 
 Quando a pergunta pede numeros atuais da tela, como saldo projetado, creditos,
 debitos, latencia, filas, projecoes, total de req/s, clientes, saude ou alertas,

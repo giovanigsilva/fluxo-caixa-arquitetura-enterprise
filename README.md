@@ -61,8 +61,8 @@ inclui:
 - Tela inicial pública com login, senha e Google reCAPTCHA v2 validado no BFF.
 - Agente Vertx flutuante no canto inferior direito, com chat real via
   subagente, consulta MCP readonly para dados atuais da tela, respostas longas
-  formatadas, conversa local com Matcha TTS atual e ligação preparada
-  visualmente.
+  formatadas, conversa local com Matcha TTS atual e ligação Vero dedicada para
+  suporte guiado.
 - Swagger/OpenAPI 100% documentado para todas as rotas expostas pelo BFF.
 - Benchmark k6 do consolidado diário validado a 50 RPS por 10 minutos, com
   0.00% de falhas.
@@ -313,7 +313,7 @@ tela", o agente consulta:
 O BFF expõe também `GET /api/agent/mcp/portal-snapshot?scenarioId=NORMAL` para
 auditoria do snapshot usado pelo agente.
 
-O mesmo subagente já aceita o canal lógico `telephony-support`, reservado para a
+O mesmo subagente já aceita o canal lógico `telephony-support`, usado pela
 telefonia de apoio. O canal `portal-voice` atende conversa local por microfone:
 o navegador envia WAV na taxa nativa do dispositivo após detectar pausa na fala,
 o subagente transcreve com Qwen3-ASR local e responde com o mesmo RAG/LLM
@@ -325,8 +325,25 @@ SupportAgent chama `POST /research/synthesize`, recebe `audio/L16`, converte
 para WAV e entrega ao navegador em `POST /api/agent/tts/synthesize`. A voz
 nativa do navegador fica apenas como fallback se o Matcha estiver indisponível
 ou não autorizado. As respostas de voz continuam em texto plano, curtas e sem
-Markdown. Nesta etapa ele ainda não aciona discagem real, telefonia SIP nem
-criação automática de lançamentos.
+Markdown.
+
+O modo `Conversar por ligação` recebe um telefone brasileiro com DDD e chama
+`POST /api/agent/call/start`. O SupportAgent normaliza o número para
+DDD+número, valida formatos com ou sem `+55`, cria um job `portal_support` e
+encaminha para o bridge Vero dedicado em `VERTX_AGENT_TELEPHONY_BASE_URL`. A
+resposta traz também `guidedTargets`, uma sequência de itens que a SPA usa para
+rolar a tela e piscar dashboard, cards, gráficos, Novo lançamento, Teste de
+carga, Lançamentos, Monitoramento e Alertas durante a orientação.
+
+No host de telefonia, o bridge isolado fica documentado em
+`/data/projects/Saas de Cobrança/discador-perfeito-rust/docker-compose.portal-support.yml`.
+Ele usa Vero por IP/porta, `SIP_OUTBOUND_DIAL_FORMAT=vero`, origem
+`3239379604`, porta SIP dedicada `5067/udp`, RTP `4020/4021` e conecta no agente
+SIP `ddr-agent-vertx-portal-support`. O agente SIP usa o mesmo perfil operacional
+validado da linha 04: Matcha TTS `freds-cml-stress-1000`, normalização de
+pontuação, filtro de backchannel expandido, resposta calorosa e limite de 120
+segundos. O fluxo é separado dos workers de cobrança, SDR e pesquisa para não
+misturar campanha com suporte do portal.
 
 Para o Matcha research atual, o acesso é protegido por allowlist de IP interno.
 O compose reserva `10.254.240.10` para o SupportAgent UAT e `10.254.240.98`
@@ -334,6 +351,23 @@ para o SupportAgent production na rede `census-realtime-agent-test_realtime`.
 Esses IPs precisam estar em `MATCHA_RESEARCH_ALLOWED_SOURCE_IPS` junto do IP da
 linha 9604, mantendo o mesmo serviço/modelo e sem expor o Matcha diretamente ao
 navegador.
+
+Variáveis relevantes do SupportAgent para telefonia:
+
+- `VERTX_AGENT_TELEPHONY_ENABLED=true`
+- `VERTX_AGENT_TELEPHONY_BASE_URL=http://vertx-portal-vero-bridge:8080`
+- `VERTX_AGENT_TELEPHONY_START_PATH=jobs/start`
+- `VERTX_AGENT_TELEPHONY_HEALTH_PATH=health`
+- `VERTX_AGENT_TELEPHONY_PROVIDER=vero`
+- `VERTX_AGENT_TELEPHONY_CALLER_ID=3239379604`
+- `VERTX_AGENT_TELEPHONY_TIMEOUT_SECONDS=8`
+
+Rotas documentadas no Swagger:
+
+- `GET /api/agent/call/health`: mostra se o bridge Vero está habilitado e
+  acessível.
+- `POST /api/agent/call/start`: solicita a ligação e devolve o roteiro visual de
+  destaque.
 
 ## Trade-offs arquiteturais
 
@@ -358,6 +392,7 @@ ela trouxe, quais custos permanecem e como evoluir para produção real.
 | Segurança alvo documentada mesmo quando não ativa na UAT | O PDF permite demonstrar premissas em decisões e representações arquiteturais, não só em codificação. | Mostra conhecimento de RLS, Vault, OIDC, TLS, DLQ, scans, observabilidade e resposta a falhas. | Exige honestidade: controles preparados não podem ser vendidos como ativos. | Promover os itens preparados por fase, sempre com teste, evidência e runbook. |
 | AI-first como processo, não como decisão financeira automática | O usuário pediu destacar a implementação AI-first, mas o domínio financeiro exige previsibilidade e auditoria. | Documentação, Swagger, scripts e matriz de aderência ficam legíveis para humanos e agentes de IA. | Não há IA executando lançamentos ou aprovando decisões financeiras na UAT. | Usar IA apenas como assistente auditável para suporte operacional, análise de logs e geração de relatórios, com fronteira explícita. |
 | MCP readonly para enriquecer o agente | O agente precisava responder sobre o que está na tela sem depender de números decorados no RAG. | Respostas ficam ancoradas nos serviços reais do portal: saldo, créditos, débitos, consolidado, latência, filas, projeções, req/s, saúde e alertas. | Continua sendo leitura operacional; se Entries/Consolidation/Observability estiverem indisponíveis, o agente não inventa números e informa indisponibilidade do snapshot. | Evoluir para MCP externo versionado, com autenticação própria, auditoria por ferramenta, cache curto, rate limit e permissões por tenant/role. |
+| Bridge Vero dedicado para suporte por ligação | A Vero funcional já atende outros fluxos e os workers existentes têm regras de cobrança, SDR ou pesquisa. | A ligação do portal disca de verdade, usa agente SIP próprio e reaproveita o perfil de fala validado da linha 04 sem contaminar campanhas. | Exige operar um container adicional e validar disponibilidade do tronco antes de testes reais. | Transformar o bridge em serviço versionado com fila, auditoria por chamada, WebSocket de eventos para destaque em tempo real e rate limit por usuário. |
 
 Resumo da decisão principal: para a prova, a escolha foi entregar o fluxo crítico
 fim a fim funcionando e medido; para produção real, a evolução correta é trocar

@@ -39,6 +39,8 @@ type AgentCitation = { id: string; title: string }
 type AgentMessage = { id: string; role: "agent" | "user"; text: string; citations?: AgentCitation[] }
 type AgentChatResponse = { reply: string; model: string; mode: string; citations: AgentCitation[]; refusalReason?: string | null }
 type AgentVoiceTurnResponse = { transcript: string; reply: string; model: string; mode: string; citations: AgentCitation[]; refusalReason?: string | null; asrModel: string; language?: string | null; asrLatencyMs?: number | null; inputSampleRate?: number | null }
+type AgentCallGuideTarget = { targetId: string; label: string; delayMs: number }
+type AgentCallStartResponse = { status: string; callId: string; phoneNumber: string; provider: string; callerId: string; message: string; guidedTargets: AgentCallGuideTarget[] }
 type VoiceCaptureState = "idle" | "opening" | "recording" | "processing" | "speaking"
 
 const voiceOpeningText = "Olá seja bem vindo, em que posso te ajudar?"
@@ -93,6 +95,7 @@ const initialAgentMessages: AgentMessage[] = [
   { id: "agent-welcome", role: "agent", text: "Olá, eu sou o agente Vertx. Estou conectado ao subagente com LLM local em GPU, RAG governado e MCP readonly para consultar os dados atuais do portal." }
 ]
 const portalFocusTimers = new Map<string, number>()
+const portalCallGuideTimers: number[] = []
 const portalFocusTargets: Array<{ id: string; citationIds: string[]; terms: string[] }> = [
   { id: "new-entry-panel", citationIds: ["entries.form"], terms: ["novo lancamento", "novo lançamento", "registrar lancamento", "registrar lançamento", "lancamento de debito", "lançamento de débito", "lancamento de credito", "lançamento de crédito", "campo valor", "campo data", "campo descricao", "campo descrição", "campo cliente"] },
   { id: "loadtest", citationIds: ["observability.loadtest"], terms: ["teste de carga", "cenarios sinteticos", "cenários sintéticos", "carga 50", "carga 100", "pico 200", "recuperacao", "recuperação"] },
@@ -555,6 +558,9 @@ function FloatingAgent({ session, scenarioId }: { session: LoginSession; scenari
   const [phoneNumber, setPhoneNumber] = useState("")
   const [agentPending, setAgentPending] = useState(false)
   const [agentError, setAgentError] = useState<string | null>(null)
+  const [callPending, setCallPending] = useState(false)
+  const [callStatus, setCallStatus] = useState<string | null>(null)
+  const [callError, setCallError] = useState<string | null>(null)
   const [voiceState, setVoiceState] = useState<VoiceCaptureState>("idle")
   const [voiceError, setVoiceError] = useState<string | null>(null)
   const feedRef = useRef<HTMLDivElement | null>(null)
@@ -582,6 +588,7 @@ function FloatingAgent({ session, scenarioId }: { session: LoginSession; scenari
 
   useEffect(() => () => {
     voiceSessionActiveRef.current = false
+    clearPortalCallGuide()
     stopVoiceCapture()
     stopVoicePlayback()
   }, [])
@@ -597,6 +604,7 @@ function FloatingAgent({ session, scenarioId }: { session: LoginSession; scenari
 
   function closeAgent() {
     endVoiceConversation()
+    clearPortalCallGuide()
     setMode(null)
     setMenuOpen(false)
   }
@@ -649,6 +657,35 @@ function FloatingAgent({ session, scenarioId }: { session: LoginSession; scenari
       }])
     } finally {
       setAgentPending(false)
+    }
+  }
+
+  async function startAgentCall() {
+    const targetPhone = phoneNumber.trim()
+    if (!targetPhone || callPending) {
+      return
+    }
+
+    setCallPending(true)
+    setCallError(null)
+    setCallStatus("Solicitando ligação pela Vero...")
+    try {
+      const answer = await request<AgentCallStartResponse>("/api/agent/call/start", {
+        method: "POST",
+        body: JSON.stringify({
+          sessionId: session.pendingSessionId,
+          phoneNumber: targetPhone,
+          scenarioId
+        })
+      })
+      setCallStatus(`${answer.message} Número: ${answer.phoneNumber}. Origem: ${answer.callerId}.`)
+      runPortalGuidedTargets(answer.guidedTargets)
+    } catch (failure) {
+      clearPortalCallGuide()
+      setCallStatus(null)
+      setCallError(readError(failure))
+    } finally {
+      setCallPending(false)
     }
   }
 
@@ -974,12 +1011,23 @@ function FloatingAgent({ session, scenarioId }: { session: LoginSession; scenari
 
           {mode === "call" && (
             <div className="agent-call-preview">
+              <div className={`agent-call-status ${callPending || callStatus ? "active" : ""}`}>
+                <Phone size={24} />
+                <span>
+                  <strong>{callPending ? "Chamando pela Vero" : callStatus ? "Ligação solicitada" : "Ligação com agente"}</strong>
+                  <small>{callStatus ?? "Informe o telefone com DDD para receber a orientação guiada do agente Vertx."}</small>
+                </span>
+              </div>
               <label className="field">
                 <span>Número de telefone</span>
                 <input value={phoneNumber} onChange={event => setPhoneNumber(event.target.value)} inputMode="tel" placeholder="(31) 99999-9999" />
               </label>
-              <button disabled type="button"><Phone size={18} /> Ligar com agente</button>
-              <small>Etapa visual preparada; integração telefônica será detalhada depois.</small>
+              <button disabled={callPending || !phoneNumber.trim()} onClick={startAgentCall} type="button">
+                {callPending ? <RefreshCw size={18} /> : <Phone size={18} />}
+                {callPending ? "Chamando..." : "Ligar com agente"}
+              </button>
+              {callError && <p className="agent-panel-error">{callError}</p>}
+              <small>O agente usa o bridge Vero dedicado, fala com o perfil da linha 04 e destaca os itens do portal durante a orientação.</small>
             </div>
           )}
         </section>
@@ -1213,6 +1261,23 @@ function focusPortalTargetFromAgentAnswer(query: string, reply: string, citation
   }
 
   window.requestAnimationFrame(() => highlightPortalTarget(targetId))
+}
+
+function runPortalGuidedTargets(targets: AgentCallGuideTarget[]) {
+  clearPortalCallGuide()
+  targets.forEach(target => {
+    const timer = window.setTimeout(() => highlightPortalTarget(target.targetId), Math.max(0, target.delayMs))
+    portalCallGuideTimers.push(timer)
+  })
+}
+
+function clearPortalCallGuide() {
+  while (portalCallGuideTimers.length) {
+    const timer = portalCallGuideTimers.pop()
+    if (timer) {
+      window.clearTimeout(timer)
+    }
+  }
 }
 
 function resolvePortalFocusTarget(query: string, reply: string, citations?: AgentCitation[]) {

@@ -72,7 +72,7 @@ internal static class SwaggerDocumentation
     },
     {
       "name": "Support agent",
-      "description": "Subagente de apoio com LLM local em GPU e RAG governado."
+      "description": "Subagente de apoio com LLM local em GPU, RAG governado, MCP readonly e ligação Vero."
     },
     {
       "name": "Entries - customers",
@@ -318,6 +318,48 @@ internal static class SwaggerDocumentation
         "responses": {
           "200": { "$ref": "#/components/responses/AgentVoiceTurnResponse" },
           "400": { "$ref": "#/components/responses/BadRequest" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/api/agent/call/health": {
+      "get": {
+        "tags": ["Support agent"],
+        "operationId": "getSupportAgentCallHealth",
+        "summary": "Consulta disponibilidade da ligação Vero",
+        "description": "Consulta se o bridge Vero dedicado do agente está habilitado e pronto para receber solicitações de ligação do portal.",
+        "responses": {
+          "200": { "$ref": "#/components/responses/AgentTelephonyHealthResponse" }
+        }
+      }
+    },
+    "/api/agent/call/start": {
+      "post": {
+        "tags": ["Support agent"],
+        "operationId": "startSupportAgentCall",
+        "summary": "Solicita ligação com agente pela Vero",
+        "description": "Recebe um telefone brasileiro com DDD, normaliza o número, solicita a chamada no bridge Vero dedicado e retorna o roteiro visual usado pelo portal para rolar e destacar os itens durante a orientação telefônica. O bridge usa o perfil operacional da linha 04: Vero, agente SIP dedicado, Matcha TTS freds-cml-stress-1000, normalização de pontuação e política de suporte restrita ao portal.",
+        "parameters": [
+          { "$ref": "#/components/parameters/TenantIdHeader" },
+          { "$ref": "#/components/parameters/UserIdHeader" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/AgentCallStartRequest" },
+              "example": {
+                "sessionId": "ps_00000000000000000000000000000000",
+                "phoneNumber": "(31) 99999-9999",
+                "scenarioId": "NORMAL"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "$ref": "#/components/responses/AgentCallStartResponse" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "409": { "$ref": "#/components/responses/Conflict" },
           "503": { "$ref": "#/components/responses/ServiceUnavailable" }
         }
       }
@@ -1060,6 +1102,42 @@ internal static class SwaggerDocumentation
           }
         }
       },
+      "AgentTelephonyHealthResponse": {
+        "description": "Estado do bridge Vero usado pelo agente.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/AgentTelephonyHealthResponse" },
+            "example": {
+              "enabled": true,
+              "provider": "vero",
+              "callerId": "3239379604",
+              "status": "ready",
+              "detail": "{\"status\":\"ready\"}"
+            }
+          }
+        }
+      },
+      "AgentCallStartResponse": {
+        "description": "Ligação solicitada e roteiro visual devolvido ao portal.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/AgentCallStartResponse" },
+            "example": {
+              "status": "requested",
+              "callId": "portal-support-00000000000000000000000000000000",
+              "phoneNumber": "(31) 99999-9999",
+              "provider": "vero",
+              "callerId": "3239379604",
+              "message": "Chamada solicitada pela Vero. O agente Vertx vai orientar pelo telefone e o portal vai destacar os pontos principais na tela.",
+              "guidedTargets": [
+                { "targetId": "dashboard", "label": "Dashboard executivo", "delayMs": 800 },
+                { "targetId": "new-entry-panel", "label": "Novo lançamento", "delayMs": 20000 },
+                { "targetId": "loadtest", "label": "Teste de carga", "delayMs": 22400 }
+              ]
+            }
+          }
+        }
+      },
       "Customer": {
         "description": "Cliente.",
         "content": {
@@ -1301,6 +1379,52 @@ internal static class SwaggerDocumentation
         "properties": {
           "sessionId": { "type": "string", "nullable": true, "example": "ps_00000000000000000000000000000000" },
           "text": { "type": "string", "minLength": 1, "maxLength": 600, "description": "Texto em português já adequado para fala. O backend remove Markdown, fontes e URLs antes de chamar o Matcha.", "example": "Olá seja bem vindo, em que posso te ajudar?" }
+        }
+      },
+      "AgentCallStartRequest": {
+        "type": "object",
+        "required": ["phoneNumber"],
+        "properties": {
+          "sessionId": { "type": "string", "nullable": true, "example": "ps_00000000000000000000000000000000" },
+          "phoneNumber": { "type": "string", "description": "Telefone brasileiro com DDD. O backend aceita formatos com +55, espaços, parênteses e hífen, mas envia ao bridge Vero em DDD+número.", "example": "(31) 99999-9999" },
+          "scenarioId": { "type": "string", "nullable": true, "description": "Cenário atual do dashboard usado para contextualizar a ligação e o roteiro visual.", "example": "NORMAL" }
+        }
+      },
+      "AgentCallStartResponse": {
+        "type": "object",
+        "required": ["status", "callId", "phoneNumber", "provider", "callerId", "message", "guidedTargets"],
+        "properties": {
+          "status": { "type": "string", "enum": ["requested"], "example": "requested" },
+          "callId": { "type": "string", "description": "Identificador do job/chamada aceito pelo bridge.", "example": "portal-support-00000000000000000000000000000000" },
+          "phoneNumber": { "type": "string", "description": "Telefone normalizado para exibição.", "example": "(31) 99999-9999" },
+          "provider": { "type": "string", "example": "vero" },
+          "callerId": { "type": "string", "description": "DDR/origem configurada para a chamada de suporte.", "example": "3239379604" },
+          "message": { "type": "string", "description": "Mensagem operacional exibida pelo portal." },
+          "guidedTargets": {
+            "type": "array",
+            "description": "Sequência de itens que o portal deve rolar e destacar durante a ligação.",
+            "items": { "$ref": "#/components/schemas/AgentCallGuideTarget" }
+          }
+        }
+      },
+      "AgentCallGuideTarget": {
+        "type": "object",
+        "required": ["targetId", "label", "delayMs"],
+        "properties": {
+          "targetId": { "type": "string", "description": "ID DOM do item destacado pelo portal.", "example": "new-entry-panel" },
+          "label": { "type": "string", "description": "Nome humano do item.", "example": "Novo lançamento" },
+          "delayMs": { "type": "integer", "format": "int32", "description": "Atraso após a aceitação da chamada para executar o destaque.", "example": 20000 }
+        }
+      },
+      "AgentTelephonyHealthResponse": {
+        "type": "object",
+        "required": ["enabled", "provider", "callerId", "status"],
+        "properties": {
+          "enabled": { "type": "boolean", "example": true },
+          "provider": { "type": "string", "example": "vero" },
+          "callerId": { "type": "string", "example": "3239379604" },
+          "status": { "type": "string", "enum": ["disabled", "misconfigured", "ready", "unavailable", "timeout"], "example": "ready" },
+          "detail": { "type": "string", "nullable": true, "description": "Resposta curta do bridge ou motivo de indisponibilidade." }
         }
       },
       "AgentChatResponse": {
